@@ -1,4 +1,5 @@
 #!/usr/bin/python
+
 # test: msms 10 10 -s tbs -SAA 200 -SaA tbs -SF 1e-2 -Smu 0
 # cat prior.txt | msms 50 10 -s tbs -r 1 10000 -SAA tbs -SaA 100 -SF 0.01 -N 100000 >output_test.msms
 import sys
