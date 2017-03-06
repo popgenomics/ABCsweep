@@ -2,8 +2,12 @@
 # test: msms 10 10 -s tbs -SAA 200 -SaA tbs -SF 1e-2 -Smu 0
 # cat prior.txt | msms 50 10 -s tbs -r 1 10000 -SAA tbs -SaA 100 -SF 0.01 -N 100000 >output_test.msms
 import sys
+from numpy import mean
+from numpy import std 
+
 inputFileName = sys.argv[1]
 nIndiv = int(sys.argv[2])
+nRep = int(sys.argv[3])
 
 def getParams(x):
 	res = {}
@@ -75,6 +79,64 @@ totalData = parse_msms(inputFileName, nIndiv)
 for i in totalData:
 	if totalData[i]["segsites"] != 0:
 		totalData[i]["pi"] = comp_pi(totalData[i]["haplotypes"], totalData[i]["segsites"])
+		del totalData[i]["haplotypes"]	
+
+
+# compute the average pi over replicates
+width = 0.1
+step = 0.05
+
+def window(width, step):
+	bins = {}
+	cnt = 0
+	minB = 0
+	maxB = width
+	bins[cnt] = {}
+	bins[cnt]["min"] = minB 
+	bins[cnt]["max"] = maxB 
+	while(round((minB+width), 5) <= 1 and maxB < 1):
+		cnt += 1
+		minB += step
+		maxB += step
+		if maxB > 1:
+			maxB = 1
+		bins[cnt] = {}
+		bins[cnt]["min"] = round(minB, 5)
+		bins[cnt]["max"] = round(maxB, 5)
+	return(bins)
+
+bins = window(width, step)
+
+pos_avg, pos_std = [], []
+pi_avg, pi_std = [], []
+
+
+bins_tmp = {}
+for i in bins:
+	bins_tmp[i] = {}
+	bins_tmp[i]["positions"] = []
+	bins_tmp[i]["pi"] = []
+
+
+for i in range(nRep):
+	for j in range(len(totalData[i]["positions"])):
+		pos_tmp = totalData[i]["positions"][j]
+		pi_tmp = totalData[i]["pi"][j]
+		bin_value = [ k for k in bins if pos_tmp >= bins[k]["min"] and pos_tmp < bins[k]["max"] ]
+		for l in bin_value:
+			bins_tmp[l]["positions"].append(pos_tmp)
+			bins_tmp[l]["pi"].append(pi_tmp)
+
+
+sum_stats_header = ""
+sum_stats_values = ""
+for i in bins_tmp:
+	sum_stats_header += "pi_avg_bin_{0}\t".format(i)
+	sum_stats_values += "{0:.5f}\t".format(std(bins_tmp[i]["pi"]))
+	sum_stats_header += "pi_std_bin_{0}\t".format(i)
+	sum_stats_values += "{0:.5f}\t".format(std(bins_tmp[i]["pi"]))
+
+
 
 
 # generates outputs
@@ -94,6 +156,7 @@ for i in totalData:
 output = header + simulations
 outfile = open("output_parameters.txt", "w")
 outfile.write(output)
+
 
 # diversity
 simulations = ""
