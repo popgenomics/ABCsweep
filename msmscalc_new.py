@@ -5,6 +5,7 @@
 import sys
 from numpy import mean
 from numpy import std 
+from numpy import sum as somme
 from scipy.stats import pearsonr
 
 
@@ -13,6 +14,15 @@ nIndiv = int(sys.argv[2])
 nRep = int(sys.argv[3])
 nCombParam = int(sys.argv[4])
 regionSize = int(sys.argv[5])
+
+
+def stdCustom(liste, moyenne, longueurRegion):
+	# 'moyenne' = mean of ['liste' (size L) + longueurRegion x 0]
+	res = 0.0
+	for i in liste:
+		res += (i - moyenne)**2
+	res /= longueurRegion
+	return(sqrt(res))
 
 
 def getParams(x):
@@ -170,20 +180,38 @@ for i in range(nCombParam):
 
 
 # treat the replicated datasets
-for i in range(nCombParam):
-	print(i)
+for i in range(nCombParam): # loop over combination of parameters
 	a = calc_window(i, nRep=nRep, bins=bins) # to pool bins of replicated simulations
 	res_tmp = ""
 	for j in bins:
-		res_tmp += "{0}\t".format(round(mean(a[j]['pi']), 5))
+		# pi_avg = sum(pairwise_differences) / (#replicates * regionSize)
+		L_tmp = nRep*regionSize*(max(a[j]['positions'])-min(a[j]['positions']))
+		mean_tmp = somme(a[j]['pi'])/L_tmp
+		res_tmp += "{0}\t".format(round(mean_tmp, 5))
 		pos_out += "{0}\t".format(round(mean(a[j]['positions']), 5))
 	pos_out = pos_out.strip() + "\n"
 	for j in bins:
-		 res_tmp += "{0}\t".format(round(std(a[j]['pi']), 5))
+		std_tmp = stdCustom(a[j]['pi'], mean_tmp, L_tmp)
+#		 res_tmp += "{0}\t".format(round(std(a[j]['pi']), 5))
+		res_tmp += "{0}\t".format(round(std_tmp, 5))
 	for j in bins:
-		 tmp = pearsonr(a[j]['positions'], a[j]['pi'])
-		 res_tmp += "{0}\t{1}\t".format(round(tmp[0], 5), round(tmp[1], 5))
+		tmp = pearsonr(a[j]['positions'], a[j]['pi'])
+		res_tmp += "{0}\t{1}\t".format(round(tmp[0], 5), round(tmp[1], 5))
 	res_tmp = res_tmp.strip() + "\n"
 	stats_out += res_tmp
+
+
+outfile = open("outputABC_prior.txt", "w")
+outfile.write(params_out)
+outfile.close()
+
+outfile = open("outputABC_positions.txt", "w")
+outfile.write(pos_out)
+outfile.close()
+
+outfile = open("outputABC_sumStats.txt", "w")
+outfile.write(stats_out)
+outfile.close()
+
 
 
