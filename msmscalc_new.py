@@ -6,6 +6,7 @@ import sys
 from numpy import mean
 from numpy import std 
 from numpy import sum as somme
+from numpy import sqrt
 from scipy.stats import pearsonr
 
 
@@ -185,8 +186,8 @@ for i in range(nCombParam): # loop over combination of parameters
 	res_tmp = ""
 	for j in bins:
 		# pi_avg = sum(pairwise_differences) / (#replicates * regionSize)
-		L_tmp = nRep*regionSize*(max(a[j]['positions'])-min(a[j]['positions']))
-		mean_tmp = somme(a[j]['pi'])/L_tmp
+		L_tmp = nRep*regionSize*(max(a[j]['positions'])-min(a[j]['positions'])) # L_tmp = #replicates x regionSize x relative_bin_size
+		mean_tmp = somme(a[j]['pi'])/L_tmp # mean_pi = sum of pi over SNPs and over replicates / L_tmp
 		res_tmp += "{0}\t".format(round(mean_tmp, 5))
 		pos_out += "{0}\t".format(round(mean(a[j]['positions']), 5))
 	pos_out = pos_out.strip() + "\n"

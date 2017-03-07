@@ -1,5 +1,5 @@
 #!/bin/sh
-#./ABCsweep.sh nInd nRep
+#./ABCsweep.sh nInd nRep regionSize priorfile
 nInd=$1 # number of simulated individuals
 nRep=$2 # number of times a combination of parameters is replicated
 length=$3 # number of nucleotides of the surveyed region 
@@ -18,7 +18,7 @@ nCombParam=$(wc -l $priorfile | awk '{print $1}')
 
 mkfifo fifo
 ./msmscalc.py fifo $nInd $nRep $nCombParam $length&
-cat ${priorfile}_tmp | msms $nInd $nSimul -s tbs -r 80 $length -SAA tbs -SaA 100 -SF 0 -Sp 0.5 -N 100000  >fifo
+cat ${priorfile}_tmp | msms $nInd $nSimul -s tbs -r 80 $length -SAA tbs -SaA 100 -SF 0 -Sp 1 -N 100000  >fifo
 rm fifo
 rm ${priorfile}_tmp
  
