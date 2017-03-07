@@ -17,8 +17,8 @@ done <$priorfile
 nCombParam=$(wc -l $priorfile | awk '{print $1}')
 
 mkfifo fifo
-./msmscalc.py fifo $nInd $nRep $nCombParam $length&
-cat ${priorfile}_tmp | msms $nInd $nSimul -s tbs -r 80 $length -SAA tbs -SaA 100 -SF 0 -Sp 1 -N 100000  >fifo
+./msmscalc.py fifo $nInd $nRep $nCombParam $length &
+cat ${priorfile}_tmp | msms $nInd $nSimul -s 500 -r 100 $length -SAA tbs -SaA 100 -SF tbs -Sp tbs -N 100000  >fifo
 rm fifo
 rm ${priorfile}_tmp
  
