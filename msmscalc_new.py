@@ -95,6 +95,28 @@ def window(width, step):
 		bins[cnt]["max"] = round(maxB, 5)
 	return(bins)
 
+
+def calc_window(rep, nRep, bins):
+	# function used to return list of 'positions' and 'associated pi' within different bins, over replicates in the
+	# rep = the id of the surveyed replicated simulations
+	# nRep = number of times the simulation had been replicated
+	bins_tmp = {}
+	for i in bins:
+		bins_tmp[i] = {}
+		bins_tmp[i]["positions"] = []
+		bins_tmp[i]["pi"] = []
+	for i in range(nRep): # loop over the replicates
+		for j in range(len(totalData[rep*nRep + i]["positions"])): # loop over positions
+			pos_tmp = totalData[rep*nRep + i]["positions"][j]
+			pi_tmp = totalData[rep*nRep + i]["pi"][j]
+			bin_value = [ k for k in bins if pos_tmp >= bins[k]["min"] and pos_tmp < bins[k]["max"] ]
+			for l in bin_value:
+				bins_tmp[l]["positions"].append(pos_tmp)
+				bins_tmp[l]["pi"].append(pi_tmp)
+#		print(" ".join([ str(totalData[rep*nRep]['params'][k]) for k in totalData[rep*nRep]['params'] ])) # print test of homogeneity in parameters over replicates
+	return(bins_tmp)
+
+
 # parse the ms output file
 #inputFileName = "output_test.msms"
 totalData = parse_msms(inputFileName, nIndiv)
