@@ -128,6 +128,34 @@ def calc_window(rep, nRep, bins):
 	return(bins_tmp)
 
 
+def tajimaD(nInd, pi, nS, size):
+	# nInd = number of individuals in the alignment
+	# pi = sum(pi over SNPs) / size
+	# size = number of nucleotide between the two ends of the haplotype
+	# nS = number of SNPs within the alignment
+	# a1 and a2
+	a1, a2 = 0.0, 0.0
+	for i in range(nInd-1):
+		a1 += 1.0/i
+		a2 += 1.0/(i**2)
+	# b1 and b2
+	b1 = (nInd + 1.0) / (3.0 * (nInd - 1))
+	b2 = 2.0 * (nInd**2 + nInd + 3.0) / (9.0*nInd * (nInd - 1))
+	# c1 and c2
+	c1 = b1 - 1.0 / a1
+	c2 = b2 - (nInd + 2.0) / (a1 * nInd) + a2/(a1**2)
+	# e1 and e2
+	e1 = c1/a1
+	e2 = c2/(a1**2 + a2)
+	# pi is assumed to be: sum(pi over SNPs)/size, let's compute thetaW per nucleotide 
+	thetaW = (nS / a1) / size
+	# denominateur
+	denominateur = e1*nS + e2*nS*(nS - 1)
+	denominateur = sqrt(denominateur)
+	#tajima D
+	return((pi - thetaW) / denominateur)
+
+	
 # parse the ms output file
 #inputFileName = "output_test.msms"
 totalData = parse_msms(inputFileName, nIndiv)
@@ -213,6 +241,5 @@ outfile.close()
 outfile = open("outputABC_sumStats.txt", "w")
 outfile.write(stats_out)
 outfile.close()
-
 
 
