@@ -3,6 +3,7 @@
 # test: msms 10 10 -s tbs -SAA 200 -SaA tbs -SF 1e-2 -Smu 0
 # cat prior.txt | msms 50 10 -s tbs -r 1 10000 -SAA tbs -SaA 100 -SF 0.01 -N 100000 >output_test.msms
 import sys
+import time
 from numpy import mean
 from numpy import std 
 from numpy import sum as somme
@@ -237,6 +238,7 @@ for i in range(nCombParam):
 
 # treat the replicated datasets
 for i in range(nCombParam): # loop over combination of parameters
+	print("simulation {0} over a total of {1}: {2}".format(i, nCombParam, time.strftime("%H:%M:%S")))
 	# TODO: calling this function tajimaD(nInd, pi, nS, size)
 	a = calc_window(i, nRep=nRep, bins=bins, regionSize=regionSize) # get summary statistics per bin for the replicate i
 	for j in bins:
