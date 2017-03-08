@@ -107,27 +107,6 @@ def window(width, step):
 	return(bins)
 
 
-def calc_window(rep, nRep, bins):
-	# function used to return list of 'positions' and 'associated pi' within different bins, over replicates in the
-	# rep = the id of the surveyed replicated simulations
-	# nRep = number of times the simulation had been replicated
-	bins_tmp = {}
-	for i in bins:
-		bins_tmp[i] = {}
-		bins_tmp[i]["positions"] = []
-		bins_tmp[i]["pi"] = []
-	for i in range(nRep): # loop over the replicates
-		for j in range(len(totalData[rep*nRep + i]["positions"])): # loop over positions
-			pos_tmp = totalData[rep*nRep + i]["positions"][j]
-			pi_tmp = totalData[rep*nRep + i]["pi"][j]
-			bin_value = [ k for k in bins if pos_tmp >= bins[k]["min"] and pos_tmp < bins[k]["max"] ]
-			for l in bin_value:
-				bins_tmp[l]["positions"].append(pos_tmp)
-				bins_tmp[l]["pi"].append(pi_tmp)
-#		print(" ".join([ str(totalData[rep*nRep]['params'][k]) for k in totalData[rep*nRep]['params'] ])) # print test of homogeneity in parameters over replicates
-	return(bins_tmp)
-
-
 def tajimaD(nInd, pi, nS, size):
 	# nInd = number of individuals in the alignment
 	# pi = sum(pi over SNPs) / size
@@ -136,8 +115,8 @@ def tajimaD(nInd, pi, nS, size):
 	# a1 and a2
 	a1, a2 = 0.0, 0.0
 	for i in range(nInd-1):
-		a1 += 1.0/i
-		a2 += 1.0/(i**2)
+		a1 += 1.0/(i+1)
+		a2 += 1.0/((i+1)**2)
 	# b1 and b2
 	b1 = (nInd + 1.0) / (3.0 * (nInd - 1))
 	b2 = 2.0 * (nInd**2 + nInd + 3.0) / (9.0*nInd * (nInd - 1))
@@ -152,10 +131,61 @@ def tajimaD(nInd, pi, nS, size):
 	# denominateur
 	denominateur = e1*nS + e2*nS*(nS - 1)
 	denominateur = sqrt(denominateur)
+	# test
+#	print("a1 = {0}\na2 = {1}\nb1 = {2}\nb2 = {3}\nc1 = {4}\nc2 = {5}\ne1 = {6}\ne2 = {7}\npi = {8}\nthetaW = {9}\ndenoM = {10}".format(a1, a2, b1, b2, c1, c2, e1, e2, pi, thetaW, denominateur))
 	#tajima D
 	return((pi - thetaW) / denominateur)
 
-	
+
+def calc_window(rep, nRep, bins, regionSize):
+	# function used to return list of 'positions' and 'associated pi' within different bins, over replicates in the
+	# rep = the id of the surveyed replicated simulations
+	# nRep = number of times the simulation had been replicated
+	bins_tmp = {}
+	for i in bins:
+		bins_tmp[i] = {}
+		for j in range(nRep):
+			bins_tmp[i][j] = {} # bins_tmp[bin ID][rep ID]
+			bins_tmp[i][j]['positions'] = [] # bins_tmp[bin ID][rep ID]
+			bins_tmp[i][j]['pi'] = [] # bins_tmp[bin ID][rep ID]
+	for i in range(nRep): # loop over the replicates
+		for j in range(len(totalData[rep*nRep + i]['positions'])): # loop over positions
+			pos_tmp = totalData[rep*nRep + i]['positions'][j]
+			pi_tmp = totalData[rep*nRep + i]['pi'][j]
+			bin_value = [ k for k in bins if pos_tmp >= bins[k]['min'] and pos_tmp < bins[k]['max'] ]
+			for l in bin_value:
+				bins_tmp[l][i]['positions'].append(pos_tmp)
+				bins_tmp[l][i]['pi'].append(pi_tmp)
+#		print(" ".join([ str(totalData[rep*nRep]['params'][k]) for k in totalData[rep*nRep]['params'] ])) # print test of homogeneity in parameters over replicates
+	res = {}
+	for i in bins: # compute statistics #1 over bins and over #2 replicates
+		meanPi_tmp = []
+		stdPi_tmp = []
+		pearsonR_tmp = []
+		pearsonPval_tmp = []
+		tajimaD_tmp = []
+		pos_tmp = []
+		size_tmp = regionSize * (bins[i]['max'] - bins[i]['min'])
+		for j in range(nRep):
+			nS = len(bins_tmp[i][j]['positions']) # number of SNPs
+			meanPi_tmp.append(mean(bins_tmp[i][j]['pi']) / size_tmp)
+			stdPi_tmp.append(stdCustom(bins_tmp[i][j]['pi'], meanPi_tmp[j], regionSize))
+			pearson = pearsonr(bins_tmp[i][j]['positions'], bins_tmp[i][j]['pi'])
+			pearsonR_tmp.append(pearson[0])
+			pearsonPval_tmp.append(pearson[1])
+			tajimaD_tmp.append(tajimaD(nIndiv, meanPi_tmp[j], nS, size_tmp))
+			pos_tmp.append(mean(bins_tmp[i][j]['positions']))
+			#def stdCustom(liste, moyenne, longueurRegion):
+		res[i] = {}
+		res[i]['pi_avg'] = mean(meanPi_tmp)
+		res[i]['pi_std'] = mean(stdPi_tmp)
+		res[i]['pearson_r'] = mean(pearsonR_tmp)
+		res[i]['pearson_pval'] = mean(pearsonPval_tmp)
+		res[i]['tajD'] = mean(tajimaD_tmp)
+		res[i]['position'] = mean(pos_tmp)
+	return(res)
+
+
 # parse the ms output file
 #inputFileName = "output_test.msms"
 totalData = parse_msms(inputFileName, nIndiv)
@@ -172,21 +202,18 @@ for i in totalData:
 width = 0.1
 step = 0.05
 
+# define the bin boundaries
 bins = window(width, step)
 
 
-# prepare the outputs:
+# prepare the output files:
 stats_out = ""
 for i in bins:
-	stats_out += "pi_avg_bin_{0}\t".format(i)
-
-
-for i in bins:
-	stats_out += "pi_std_bin_{0}\t".format(i)
-
-
-for i in bins:
-	stats_out += "pearson_r_bin_{0}\tpearson_pval_bin_{0}\t".format(i)
+	stats_out += 'pi_avg_bin{0}\t'.format(i)
+	stats_out += 'pi_std_bin{0}\t'.format(i)
+	stats_out += 'tajD_bin{0}\t'.format(i)
+	stats_out += 'pearson_r_bin{0}\t'.format(i)
+	stats_out += 'pearson_pval_bin{0}\t'.format(i)
 stats_out = stats_out.strip() + "\n"
 
 
@@ -210,24 +237,17 @@ for i in range(nCombParam):
 
 # treat the replicated datasets
 for i in range(nCombParam): # loop over combination of parameters
-	a = calc_window(i, nRep=nRep, bins=bins) # to pool bins of replicated simulations
-	res_tmp = ""
+	# TODO: calling this function tajimaD(nInd, pi, nS, size)
+	a = calc_window(i, nRep=nRep, bins=bins, regionSize=regionSize) # get summary statistics per bin for the replicate i
 	for j in bins:
-		# pi_avg = sum(pairwise_differences) / (#replicates * regionSize)
-		L_tmp = nRep*regionSize*(max(a[j]['positions'])-min(a[j]['positions'])) # L_tmp = #replicates x regionSize x relative_bin_size
-		mean_tmp = somme(a[j]['pi'])/L_tmp # mean_pi = sum of pi over SNPs and over replicates / L_tmp
-		res_tmp += "{0}\t".format(round(mean_tmp, 5))
-		pos_out += "{0}\t".format(round(mean(a[j]['positions']), 5))
+		stats_out += "{0}\t".format(a[j]['pi_avg'])
+		stats_out += "{0}\t".format(a[j]['pi_std'])
+		stats_out += "{0}\t".format(a[j]['tajD'])
+		stats_out += "{0}\t".format(a[j]['pearson_r'])
+		stats_out += "{0}\t".format(a[j]['pearson_pval'])
+		pos_out += "{0}\t".format(a[j]['position'])
+	stats_out = stats_out.strip() + "\n"
 	pos_out = pos_out.strip() + "\n"
-	for j in bins:
-		std_tmp = stdCustom(a[j]['pi'], mean_tmp, L_tmp)
-#		 res_tmp += "{0}\t".format(round(std(a[j]['pi']), 5))
-		res_tmp += "{0}\t".format(round(std_tmp, 5))
-	for j in bins:
-		tmp = pearsonr(a[j]['positions'], a[j]['pi'])
-		res_tmp += "{0}\t{1}\t".format(round(tmp[0], 5), round(tmp[1], 5))
-	res_tmp = res_tmp.strip() + "\n"
-	stats_out += res_tmp
 
 
 outfile = open("outputABC_prior.txt", "w")
