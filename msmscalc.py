@@ -5,6 +5,7 @@
 import sys
 import time
 from numpy import mean
+from numpy import nanmean
 from numpy import std 
 from numpy import sum as somme
 from numpy import sqrt
@@ -73,18 +74,46 @@ def parse_msms(x, nIndiv):
 	return(res)
 
 
-def comp_pi(alignement, nSegSites):
-	res = []
+def comp_differences(alignement, nSegSites):
+	n = len(alignement) # number of individuals in the alignement
+	res = {}
+	res["kxy_allSNP"] = [] # vector containing pi for different SNPs, the probability to sample 2 different alleles
+	res["kxy_singletons"] = [] # vector containing pi for different SNPs for singletons only
 	for i in range(nSegSites):
 		n0 = 0
 		n1 = 0
-		nComparaisons = len(alignement)*(len(alignement)-1) / 2.0
 		for j in alignement:
 			if j[i] == '0':
 				n0 += 1
 			if j[i] == '1':
 				n1 += 1
-		res.append(n0*n1/nComparaisons)
+		pi = n0*n1
+		res["kxy_allSNP"].append(pi)
+		if n0==1 or n1==1: # if only one derived allele or one ancestral allele
+			res["kxy_singletons"].append(pi)
+	return(res)
+
+
+def comp_pi(alignement, nSegSites):
+	n = len(alignement) # number of individuals in the alignement
+	res = {}
+	res["pi_allSNP"] = [] # vector containing pi for different SNPs, the probability to sample 2 different alleles
+	res["pi_singletons"] = [] # vector containing pi for different SNPs for singletons only
+	for i in range(nSegSites):
+		n0 = 0
+		n1 = 0
+		nComparaisons = n*(n-1.0) / 2.0
+		for j in alignement:
+			if j[i] == '0':
+				n0 += 1
+			if j[i] == '1':
+				n1 += 1
+		pi = n0*n1/nComparaisons
+		res["pi_allSNP"].append(pi)
+		if n0==1 or n1==1: # if only one derived allele or one ancestral allele
+			res["pi_singletons"].append(pi)
+	res["nSingletons"] = len(res["pi_singletons"])
+	res["nSNP"] = len(res["pi_allSNP"])
 	return(res)
 
 
@@ -108,29 +137,28 @@ def window(width, step):
 	return(bins)
 
 
-def tajimaD(nInd, pi, nS, size):
+def tajimaD(nInd, pi, nS):
 	# nInd = number of individuals in the alignment
-	# pi = sum(pi over SNPs) / size
-	# size = number of nucleotide between the two ends of the haplotype
+	# pi = sum(Kxy over SNPs and pairwise comparisons) / number_of_pairwise_comparisons
 	# nS = number of SNPs within the alignment
 	# a1 and a2
 	a1, a2 = 0.0, 0.0
 	for i in range(nInd-1):
-		a1 += 1.0/(i+1)
+		a1 += 1.0/(i+1.0)
 		a2 += 1.0/((i+1)**2)
 	# b1 and b2
-	b1 = (nInd + 1.0) / (3.0 * (nInd - 1))
-	b2 = 2.0 * (nInd**2 + nInd + 3.0) / (9.0*nInd * (nInd - 1))
+	b1 = (nInd + 1.0) / (3.0 * (nInd - 1.0))
+	b2 = 2.0 * (nInd**2 + nInd + 3.0) / (9.0*nInd * (nInd - 1.0))
 	# c1 and c2
 	c1 = b1 - 1.0 / a1
-	c2 = b2 - (nInd + 2.0) / (a1 * nInd) + a2/(a1**2)
+	c2 = b2 - (nInd + 2.0) / (a1 * nInd) + a2/(a1**2.0)
 	# e1 and e2
 	e1 = c1/a1
 	e2 = c2/(a1**2 + a2)
-	# pi is assumed to be: sum(pi over SNPs)/size, let's compute thetaW per nucleotide 
-	thetaW = (nS / a1) / size
+	# pi is assumed to be: sum(pi over SNPs)/size, let's compute thetaW
+	thetaW = nS / a1
 	# denominateur
-	denominateur = e1*nS + e2*nS*(nS - 1)
+	denominateur = e1*nS + e2*nS*(nS - 1.0)
 	denominateur = sqrt(denominateur)
 	# test
 #	print("a1 = {0}\na2 = {1}\nb1 = {2}\nb2 = {3}\nc1 = {4}\nc2 = {5}\ne1 = {6}\ne2 = {7}\npi = {8}\nthetaW = {9}\ndenoM = {10}".format(a1, a2, b1, b2, c1, c2, e1, e2, pi, thetaW, denominateur))
@@ -138,26 +166,60 @@ def tajimaD(nInd, pi, nS, size):
 	return((pi - thetaW) / denominateur)
 
 
-def calc_window(rep, nRep, bins, regionSize):
+def achazY(n, kxy):
+	# n = number of individuals
+	# kx = vector of pi values for each singletons over the bin
+	nPairwiseComp = n * (n-1.0)/2.0
+	singletons = [ i for i in kxy if i==(n-1) ]
+	nSingletons = len(kxy)
+	an = 0.0
+	bn = 0.0
+	for i in range(n-1):
+		an += 1.0/(i+1)
+		bn += 1.0/(i+1)**2
+	# f*
+	f = (n - 3.0) / (an * (n-1) - n)
+	# alpha
+	alpha = f**2 * (an - n / (n-1.0)) + f * (an * (4.0*(n+1)/((n-1.0)**2)) - 2 * ((n+3.0)/(n-1))) - an*(8*(n+1.0)/(n*(n-1)**2)) + (n**2 + n + 60.0)/(3*n * (n-1))
+	# beta
+	beta = f**2 * (bn - (2*n - 1.0)/(n-1.0)**2) + f * (bn * 8.0/(n-1.0) - an * 4.0/(n*(n-1.0)) - (n**3 + 12*n**2 - 35*n + 18.0)/(n*(n-1.0)**2)) - bn * 16.0/(n*(n-1)) + an * 8.0 / (n**2 * (n-1.0)) + 2 * (n**4 + 110.0*n**2 - 255*n + 126.0) / (9.0 * n**2 * (n-1)**2)
+	# mu
+	mu = an - n/(n-1.0)
+	# theta
+	theta = (1.0 * nSingletons) / mu
+	# pi singleton: sum of kxy for singletons only
+	pi_singleton = 0.0
+	for i in singletons:
+		pi_singleton += i
+	pi_singleton /= nPairwiseComp
+	# compute Y* from Achaz
+	numerateur = pi_singleton - f*nSingletons/an
+	denominateur = alpha * theta + beta * theta**2
+	return((1.0 * numerateur)/(1.0 * denominateur))
+
+
+def calc_window(rep, nRep, bins, regionSize, nIndiv):
 	# function used to return list of 'positions' and 'associated pi' within different bins, over replicates in the
 	# rep = the id of the surveyed replicated simulations
 	# nRep = number of times the simulation had been replicated
-	bins_tmp = {}
+	nPairwiseComp = (nIndiv * (nIndiv - 1.0)) / 2.0
+	bins_tmp = {} # bins_tmp[bin_Id][replicate_Id][['positions'], ['kxy']]
 	for i in bins:
 		bins_tmp[i] = {}
 		for j in range(nRep):
 			bins_tmp[i][j] = {} # bins_tmp[bin ID][rep ID]
 			bins_tmp[i][j]['positions'] = [] # bins_tmp[bin ID][rep ID]
-			bins_tmp[i][j]['pi'] = [] # bins_tmp[bin ID][rep ID]
+	#		bins_tmp[i][j]['pi'] = [] # bins_tmp[bin ID][rep ID]
+			bins_tmp[i][j]['kxy'] = [] # bins_tmp[bin ID][rep ID]
 	for i in range(nRep): # loop over the replicates
 		for j in range(len(totalData[rep*nRep + i]['positions'])): # loop over positions
 			pos_tmp = totalData[rep*nRep + i]['positions'][j]
-			pi_tmp = totalData[rep*nRep + i]['pi'][j]
+			kxy_tmp = totalData[rep*nRep + i]['kxy'][j] # sum of pairwise differences for a SNP
 			bin_value = [ k for k in bins if pos_tmp >= bins[k]['min'] and pos_tmp < bins[k]['max'] ]
 			for l in bin_value:
 				bins_tmp[l][i]['positions'].append(pos_tmp)
-				bins_tmp[l][i]['pi'].append(pi_tmp)
-#		print(" ".join([ str(totalData[rep*nRep]['params'][k]) for k in totalData[rep*nRep]['params'] ])) # print test of homogeneity in parameters over replicates
+				bins_tmp[l][i]['kxy'].append(kxy_tmp)
+	#		print(" ".join([ str(totalData[rep*nRep]['params'][k]) for k in totalData[rep*nRep]['params'] ])) # print test of homogeneity in parameters over replicates
 	res = {}
 	for i in bins: # compute statistics #1 over bins and over #2 replicates
 		meanPi_tmp = []
@@ -165,25 +227,29 @@ def calc_window(rep, nRep, bins, regionSize):
 		pearsonR_tmp = []
 		pearsonPval_tmp = []
 		tajimaD_tmp = []
+		achazY_tmp = []
 		pos_tmp = []
 		size_tmp = regionSize * (bins[i]['max'] - bins[i]['min'])
 		for j in range(nRep):
 			nS = len(bins_tmp[i][j]['positions']) # number of SNPs
-			meanPi_tmp.append(mean(bins_tmp[i][j]['pi']) / size_tmp)
-			stdPi_tmp.append(stdCustom(bins_tmp[i][j]['pi'], meanPi_tmp[j], regionSize))
-			pearson = pearsonr(bins_tmp[i][j]['positions'], bins_tmp[i][j]['pi'])
+	#		meanPi_tmp.append(mean(bins_tmp[i][j]['pi']) / size_tmp)
+			meanPi_tmp.append(sum(bins_tmp[i][j]['kxy']) /(1.0 * nPairwiseComp)) # sum(Kxy over comparisons at a SNP) / number_pairwise_comparison 
+			stdPi_tmp.append(stdCustom(bins_tmp[i][j]['kxy'], meanPi_tmp[j], regionSize))
+			pearson = pearsonr(bins_tmp[i][j]['positions'], bins_tmp[i][j]['kxy'])
 			pearsonR_tmp.append(pearson[0])
 			pearsonPval_tmp.append(pearson[1])
-			tajimaD_tmp.append(tajimaD(nIndiv, meanPi_tmp[j], nS, size_tmp))
+			tajimaD_tmp.append(tajimaD(nIndiv, meanPi_tmp[j], nS))
+			achazY_tmp.append(achazY(nIndiv, bins_tmp[i][j]['kxy']))
 			pos_tmp.append(mean(bins_tmp[i][j]['positions']))
 			#def stdCustom(liste, moyenne, longueurRegion):
 		res[i] = {}
-		res[i]['pi_avg'] = mean(meanPi_tmp)
-		res[i]['pi_std'] = mean(stdPi_tmp)
-		res[i]['pearson_r'] = mean(pearsonR_tmp)
-		res[i]['pearson_pval'] = mean(pearsonPval_tmp)
-		res[i]['tajD'] = mean(tajimaD_tmp)
-		res[i]['position'] = mean(pos_tmp)
+		res[i]['pi_avg'] = round(nanmean(meanPi_tmp)/size_tmp, 5)
+		res[i]['pi_std'] = round(nanmean(stdPi_tmp)/size_tmp, 5)
+		res[i]['pearson_r'] = round(nanmean(pearsonR_tmp), 5)
+		res[i]['pearson_pval'] = round(nanmean(pearsonPval_tmp), 5)
+		res[i]['tajD'] = round(nanmean(tajimaD_tmp), 5)
+		res[i]['achazY'] = round(nanmean(achazY_tmp), 5)
+		res[i]['position'] = round(nanmean(pos_tmp), 5)
 	return(res)
 
 
@@ -192,11 +258,16 @@ def calc_window(rep, nRep, bins, regionSize):
 totalData = parse_msms(inputFileName, nIndiv)
 
 
-# compute the diversity for all SNPs
+# compute the diversity for all SNPs, for all alignments
 for i in totalData:
-	if totalData[i]["segsites"] != 0:
-		totalData[i]["pi"] = comp_pi(totalData[i]["haplotypes"], totalData[i]["segsites"])
-		del totalData[i]["haplotypes"]	
+	if totalData[i]['segsites'] != 0:
+		#tmp = comp_pi(totalData[i]['haplotypes'], totalData[i]['segsites']) # first version: return the average pi
+		#totalData[i]['pi'] = tmp['pi_allSNP'] 
+		#totalData[i]['pi_singletons'] = tmp['pi_singletons'] 
+		tmp = comp_differences(totalData[i]['haplotypes'], totalData[i]['segsites']) # second version: return the sum of differences
+		totalData[i]['kxy'] = tmp['kxy_allSNP'] 
+		totalData[i]['kxy_singletons'] = tmp['kxy_singletons'] 
+		del totalData[i]['haplotypes']	
 
 
 # compute the average pi over replicates
@@ -213,6 +284,7 @@ for i in bins:
 	stats_out += 'pi_avg_bin{0}\t'.format(i)
 	stats_out += 'pi_std_bin{0}\t'.format(i)
 	stats_out += 'tajD_bin{0}\t'.format(i)
+	stats_out += 'achazY_bin{0}\t'.format(i)
 	stats_out += 'pearson_r_bin{0}\t'.format(i)
 	stats_out += 'pearson_pval_bin{0}\t'.format(i)
 stats_out = stats_out.strip() + "\n"
@@ -240,11 +312,12 @@ for i in range(nCombParam):
 for i in range(nCombParam): # loop over combination of parameters
 	print("simulation {0} over a total of {1}: {2}".format(i, nCombParam, time.strftime("%H:%M:%S")))
 	# TODO: calling this function tajimaD(nInd, pi, nS, size)
-	a = calc_window(i, nRep=nRep, bins=bins, regionSize=regionSize) # get summary statistics per bin for the replicate i
+	a = calc_window(i, nRep=nRep, bins=bins, regionSize=regionSize, nIndiv=nIndiv) # get summary statistics per bin for the replicate i
 	for j in bins:
 		stats_out += "{0}\t".format(a[j]['pi_avg'])
 		stats_out += "{0}\t".format(a[j]['pi_std'])
 		stats_out += "{0}\t".format(a[j]['tajD'])
+		stats_out += "{0}\t".format(a[j]['achazY'])
 		stats_out += "{0}\t".format(a[j]['pearson_r'])
 		stats_out += "{0}\t".format(a[j]['pearson_pval'])
 		pos_out += "{0}\t".format(a[j]['position'])
