@@ -1,4 +1,17 @@
-Trying to estimate parameters of a selective sweep using ABC:
+# Trying to estimate parameters of a selective sweep using ABC:
+# Simply call the following line to simulate:
+# 50 haploid individuals
+# 1000 SNPs in the surveyed region of length rho = 4.N.r.L = 100 (N=effective size, r=per nucleotide recombination rate, L=length in bp)
+# each combination of parameters are replicated 10 times
+# the genomic region has a length of 100kb 
+# msms used parameters read from the file: SAA_SaA_age_pos.prior
+# Simulated models can be freely modified by adapting:
+# line #24 in order to modify the msms command line
+# the content of the prior file
+
+
+./ABCsweep.sh 50 1000 100 10 100000 SAA_SaA_age_pos.prior
+
 nInd=$1 # number of simulated individuals
 nSNP=$2 # number of SNPs to simulate
 rho=$3 # 4.N.r.L (N: number of individuals; r: recombination rate per bp; L: size of the genomic region)
@@ -6,5 +19,3 @@ nRep=$4 # number of times a combination of parameters is replicated
 length=$5 # number of nucleotides of the surveyed region
 priorfile=$6 # file containing the combination of parameters
 
-./ABCsweep.sh 30 1000 800 10 100000 prior_SAA_SaA_age_pos.txt
-./ABCsweep.sh 30 1000 200 5 100000 prior_SAA_SaA_age_pos.txt
