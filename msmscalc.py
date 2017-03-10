@@ -4,6 +4,7 @@
 # cat prior.txt | msms 50 10 -s tbs -r 1 10000 -SAA tbs -SaA 100 -SF 0.01 -N 100000 >output_test.msms
 import sys
 import time
+from numpy import nan
 from numpy import mean
 from numpy import nanmean
 from numpy import std 
@@ -11,6 +12,7 @@ from numpy import sum as somme
 from numpy import sqrt
 from scipy.stats import pearsonr
 
+minNumbSNP = 5 # statistics (pi, tajD, pearson's, etc ...) are only computed if a number of SNPs>= minNumbSNP is present within the studied fragment
 
 inputFileName = sys.argv[1]
 nIndiv = int(sys.argv[2])
@@ -42,6 +44,7 @@ def getParams(x):
 def parse_msms(x, nIndiv):
 	# returns the simulated alignments
 	# x = msms output file
+	compteur = nCombParam * nRep
 	res = {}
 	infile = open(x, "r")
 	nLocus = -1
@@ -52,6 +55,8 @@ def parse_msms(x, nIndiv):
 		if "//" in i:
 			test = 1
 			nLocus += 1
+			if nLocus%(compteur/100) == 0:
+				print("simulation {0} over a total of {1}: {2}".format(nLocus, compteur, time.strftime("%H:%M:%S")))
 			res[nLocus] = {}
 			if i != "//":
 				res[nLocus]["params"] = getParams(i)
@@ -68,8 +73,15 @@ def parse_msms(x, nIndiv):
 			continue
 		if i != "" and test == 1:
 			nIndTmp += 1
-			#print("{0}: {1}".format(nIndTmp, i))
+#			print("{0}: {1}".format(nIndTmp, i))
 			res[nLocus]["haplotypes"].append(i)
+			if nIndTmp == (nIndiv-1):
+#				print("{0}\n{1}".format(nLocus, "\n".join(res[nLocus]["haplotypes"])))
+				tmp = comp_differences(res[nLocus]["haplotypes"], res[nLocus]["segsites"])
+#				print(a["kxy_allSNP"])
+				res[nLocus]['kxy'] = tmp['kxy_allSNP'] 
+				res[nLocus]['kxy_singletons'] = tmp['kxy_singletons'] 
+				del res[nLocus]['haplotypes']	
 	infile.close()
 	return(res)
 
@@ -142,60 +154,68 @@ def tajimaD(nInd, pi, nS):
 	# pi = sum(Kxy over SNPs and pairwise comparisons) / number_of_pairwise_comparisons
 	# nS = number of SNPs within the alignment
 	# a1 and a2
-	a1, a2 = 0.0, 0.0
-	for i in range(nInd-1):
-		a1 += 1.0/(i+1.0)
-		a2 += 1.0/((i+1)**2)
-	# b1 and b2
-	b1 = (nInd + 1.0) / (3.0 * (nInd - 1.0))
-	b2 = 2.0 * (nInd**2 + nInd + 3.0) / (9.0*nInd * (nInd - 1.0))
-	# c1 and c2
-	c1 = b1 - 1.0 / a1
-	c2 = b2 - (nInd + 2.0) / (a1 * nInd) + a2/(a1**2.0)
-	# e1 and e2
-	e1 = c1/a1
-	e2 = c2/(a1**2 + a2)
-	# pi is assumed to be: sum(pi over SNPs)/size, let's compute thetaW
-	thetaW = nS / a1
-	# denominateur
-	denominateur = e1*nS + e2*nS*(nS - 1.0)
-	denominateur = sqrt(denominateur)
-	# test
-#	print("a1 = {0}\na2 = {1}\nb1 = {2}\nb2 = {3}\nc1 = {4}\nc2 = {5}\ne1 = {6}\ne2 = {7}\npi = {8}\nthetaW = {9}\ndenoM = {10}".format(a1, a2, b1, b2, c1, c2, e1, e2, pi, thetaW, denominateur))
-	#tajima D
-	return((pi - thetaW) / denominateur)
+	minNumbSNP = 5
+	if nS < minNumbSNP:
+		return(nan)
+	else:
+		a1, a2 = 0.0, 0.0
+		for i in range(nInd-1):
+			a1 += 1.0/(i+1.0)
+			a2 += 1.0/((i+1)**2)
+		# b1 and b2
+		b1 = (nInd + 1.0) / (3.0 * (nInd - 1.0))
+		b2 = 2.0 * (nInd**2 + nInd + 3.0) / (9.0*nInd * (nInd - 1.0))
+		# c1 and c2
+		c1 = b1 - 1.0 / a1
+		c2 = b2 - (nInd + 2.0) / (a1 * nInd) + a2/(a1**2.0)
+		# e1 and e2
+		e1 = c1/a1
+		e2 = c2/(a1**2 + a2)
+		# pi is assumed to be: sum(pi over SNPs)/size, let's compute thetaW
+		thetaW = nS / a1
+		# denominateur
+		denominateur = e1*nS + e2*nS*(nS - 1.0)
+		denominateur = sqrt(denominateur)
+		# test
+	#	print("a1 = {0}\na2 = {1}\nb1 = {2}\nb2 = {3}\nc1 = {4}\nc2 = {5}\ne1 = {6}\ne2 = {7}\npi = {8}\nthetaW = {9}\ndenoM = {10}".format(a1, a2, b1, b2, c1, c2, e1, e2, pi, thetaW, denominateur))
+		#tajima D
+		return((pi - thetaW) / denominateur)
 
 
 def achazY(n, kxy):
 	# n = number of individuals
 	# kx = vector of pi values for each singletons over the bin
+	minNumbSNP = 5
 	nPairwiseComp = n * (n-1.0)/2.0
 	singletons = [ i for i in kxy if i==(n-1) ]
 	nSingletons = len(kxy)
-	an = 0.0
-	bn = 0.0
-	for i in range(n-1):
-		an += 1.0/(i+1)
-		bn += 1.0/(i+1)**2
-	# f*
-	f = (n - 3.0) / (an * (n-1) - n)
-	# alpha
-	alpha = f**2 * (an - n / (n-1.0)) + f * (an * (4.0*(n+1)/((n-1.0)**2)) - 2 * ((n+3.0)/(n-1))) - an*(8*(n+1.0)/(n*(n-1)**2)) + (n**2 + n + 60.0)/(3*n * (n-1))
-	# beta
-	beta = f**2 * (bn - (2*n - 1.0)/(n-1.0)**2) + f * (bn * 8.0/(n-1.0) - an * 4.0/(n*(n-1.0)) - (n**3 + 12*n**2 - 35*n + 18.0)/(n*(n-1.0)**2)) - bn * 16.0/(n*(n-1)) + an * 8.0 / (n**2 * (n-1.0)) + 2 * (n**4 + 110.0*n**2 - 255*n + 126.0) / (9.0 * n**2 * (n-1)**2)
-	# mu
-	mu = an - n/(n-1.0)
-	# theta
-	theta = (1.0 * nSingletons) / mu
-	# pi singleton: sum of kxy for singletons only
-	pi_singleton = 0.0
-	for i in singletons:
-		pi_singleton += i
-	pi_singleton /= nPairwiseComp
-	# compute Y* from Achaz
-	numerateur = pi_singleton - f*nSingletons/an
-	denominateur = alpha * theta + beta * theta**2
-	return((1.0 * numerateur)/(1.0 * denominateur))
+	if nSingletons < minNumbSNP: # if less than minNumbSNP of SNPs are present in the alignement --> return "nan" value
+		return(nan)
+	else:
+		an = 0.0
+		bn = 0.0
+		for i in range(n-1):
+			an += 1.0/(i+1)
+			bn += 1.0/(i+1)**2
+		# f*
+		f = (n - 3.0) / (an * (n-1) - n)
+		# alpha
+		alpha = f**2 * (an - n / (n-1.0)) + f * (an * (4.0*(n+1)/((n-1.0)**2)) - 2 * ((n+3.0)/(n-1))) - an*(8*(n+1.0)/(n*(n-1)**2)) + (n**2 + n + 60.0)/(3*n * (n-1))
+		# beta
+		beta = f**2 * (bn - (2*n - 1.0)/(n-1.0)**2) + f * (bn * 8.0/(n-1.0) - an * 4.0/(n*(n-1.0)) - (n**3 + 12*n**2 - 35*n + 18.0)/(n*(n-1.0)**2)) - bn * 16.0/(n*(n-1)) + an * 8.0 / (n**2 * (n-1.0)) + 2 * (n**4 + 110.0*n**2 - 255*n + 126.0) / (9.0 * n**2 * (n-1)**2)
+		# mu
+		mu = an - n/(n-1.0)
+		# theta
+		theta = (1.0 * nSingletons) / mu
+		# pi singleton: sum of kxy for singletons only
+		pi_singleton = 0.0
+		for i in singletons:
+			pi_singleton += i
+		pi_singleton /= nPairwiseComp
+		# compute Y* from Achaz
+		numerateur = pi_singleton - f*nSingletons/an
+		denominateur = alpha * theta + beta * theta**2
+		return((1.0 * numerateur)/(1.0 * denominateur))
 
 
 def calc_window(rep, nRep, bins, regionSize, nIndiv):
@@ -235,7 +255,10 @@ def calc_window(rep, nRep, bins, regionSize, nIndiv):
 	#		meanPi_tmp.append(mean(bins_tmp[i][j]['pi']) / size_tmp)
 			meanPi_tmp.append(sum(bins_tmp[i][j]['kxy']) /(1.0 * nPairwiseComp)) # sum(Kxy over comparisons at a SNP) / number_pairwise_comparison 
 			stdPi_tmp.append(stdCustom(bins_tmp[i][j]['kxy'], meanPi_tmp[j], regionSize))
-			pearson = pearsonr(bins_tmp[i][j]['positions'], bins_tmp[i][j]['kxy'])
+			if len(bins_tmp[i][j]['positions'])<minNumbSNP:
+				pearson = [nan, nan]
+			else:
+				pearson = pearsonr(bins_tmp[i][j]['positions'], bins_tmp[i][j]['kxy'])
 			pearsonR_tmp.append(pearson[0])
 			pearsonPval_tmp.append(pearson[1])
 			tajimaD_tmp.append(tajimaD(nIndiv, meanPi_tmp[j], nS))
@@ -259,15 +282,17 @@ totalData = parse_msms(inputFileName, nIndiv)
 
 
 # compute the diversity for all SNPs, for all alignments
-for i in totalData:
-	if totalData[i]['segsites'] != 0:
-		#tmp = comp_pi(totalData[i]['haplotypes'], totalData[i]['segsites']) # first version: return the average pi
-		#totalData[i]['pi'] = tmp['pi_allSNP'] 
-		#totalData[i]['pi_singletons'] = tmp['pi_singletons'] 
-		tmp = comp_differences(totalData[i]['haplotypes'], totalData[i]['segsites']) # second version: return the sum of differences
-		totalData[i]['kxy'] = tmp['kxy_allSNP'] 
-		totalData[i]['kxy_singletons'] = tmp['kxy_singletons'] 
-		del totalData[i]['haplotypes']	
+# commented block because: loop is now imbedded in the parse_msms function to save memory
+# now: the alignments are treated during reading, not only after
+#for i in totalData:
+#	if totalData[i]['segsites'] != 0:
+#		#tmp = comp_pi(totalData[i]['haplotypes'], totalData[i]['segsites']) # first version: return the average pi
+#		#totalData[i]['pi'] = tmp['pi_allSNP'] 
+#		#totalData[i]['pi_singletons'] = tmp['pi_singletons'] 
+#		tmp = comp_differences(totalData[i]['haplotypes'], totalData[i]['segsites']) # second version: return the sum of differences
+#		totalData[i]['kxy'] = tmp['kxy_allSNP'] 
+#		totalData[i]['kxy_singletons'] = tmp['kxy_singletons'] 
+#		del totalData[i]['haplotypes']	
 
 
 # compute the average pi over replicates

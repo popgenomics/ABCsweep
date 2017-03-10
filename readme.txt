@@ -7,4 +7,4 @@ length=$5 # number of nucleotides of the surveyed region
 priorfile=$6 # file containing the combination of parameters
 
 ./ABCsweep.sh 30 1000 800 10 100000 prior_SAA_SaA_age_pos.txt
-
+./ABCsweep.sh 30 1000 200 5 100000 prior_SAA_SaA_age_pos.txt
