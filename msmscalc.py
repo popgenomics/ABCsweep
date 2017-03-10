@@ -154,7 +154,6 @@ def tajimaD(nInd, pi, nS):
 	# pi = sum(Kxy over SNPs and pairwise comparisons) / number_of_pairwise_comparisons
 	# nS = number of SNPs within the alignment
 	# a1 and a2
-	minNumbSNP = 5
 	if nS < minNumbSNP:
 		return(nan)
 	else:
@@ -185,7 +184,6 @@ def tajimaD(nInd, pi, nS):
 def achazY(n, kxy):
 	# n = number of individuals
 	# kx = vector of pi values for each singletons over the bin
-	minNumbSNP = 5
 	nPairwiseComp = n * (n-1.0)/2.0
 	singletons = [ i for i in kxy if i==(n-1) ]
 	nSingletons = len(kxy)
