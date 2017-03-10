@@ -1,3 +1,6 @@
+# requires a link to 'msms' in your bin !!!
+# and the python library scipy + numpy installed
+
 # Trying to estimate parameters of a selective sweep using ABC:
 # Simply call the following line to simulate:
 # 50 haploid individuals
