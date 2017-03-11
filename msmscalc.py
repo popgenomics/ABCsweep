@@ -170,7 +170,7 @@ def tajimaD(nInd, pi, nS):
 		# e1 and e2
 		e1 = c1/a1
 		e2 = c2/(a1**2 + a2)
-		# pi is assumed to be: sum(pi over SNPs)/size, let's compute thetaW
+		# pi is assumed to already be: sum(pi over SNPs)/nCombination, let's compute thetaW
 		thetaW = nS / a1
 		# denominateur
 		denominateur = e1*nS + e2*nS*(nS - 1.0)
@@ -178,7 +178,7 @@ def tajimaD(nInd, pi, nS):
 		# test
 	#	print("a1 = {0}\na2 = {1}\nb1 = {2}\nb2 = {3}\nc1 = {4}\nc2 = {5}\ne1 = {6}\ne2 = {7}\npi = {8}\nthetaW = {9}\ndenoM = {10}".format(a1, a2, b1, b2, c1, c2, e1, e2, pi, thetaW, denominateur))
 		#tajima D
-		return((pi - thetaW) / denominateur)
+		return([(pi - thetaW) / denominateur, thetaW]) # return [tajD, thetaW]
 
 
 def achazY(n, kxy):
@@ -245,6 +245,7 @@ def calc_window(rep, nRep, bins, regionSize, nIndiv):
 		pearsonR_tmp = []
 		pearsonPval_tmp = []
 		tajimaD_tmp = []
+		thetaW_tmp = []
 		achazY_tmp = []
 		pos_tmp = []
 		size_tmp = regionSize * (bins[i]['max'] - bins[i]['min'])
@@ -259,7 +260,9 @@ def calc_window(rep, nRep, bins, regionSize, nIndiv):
 				pearson = pearsonr(bins_tmp[i][j]['positions'], bins_tmp[i][j]['kxy'])
 			pearsonR_tmp.append(pearson[0])
 			pearsonPval_tmp.append(pearson[1])
-			tajimaD_tmp.append(tajimaD(nIndiv, meanPi_tmp[j], nS))
+			tajimaD_thetaW = tajimaD(nIndiv, meanPi_tmp[j], nS) # [tajD, thetaW]
+			tajimaD_tmp.append(tajimaD_thetaW[0])
+			thetaW_tmp.append(tajimaD_thetaW[1])
 			achazY_tmp.append(achazY(nIndiv, bins_tmp[i][j]['kxy']))
 			pos_tmp.append(mean(bins_tmp[i][j]['positions']))
 			#def stdCustom(liste, moyenne, longueurRegion):
@@ -269,6 +272,7 @@ def calc_window(rep, nRep, bins, regionSize, nIndiv):
 		res[i]['pearson_r'] = round(nanmean(pearsonR_tmp), 5)
 		res[i]['pearson_pval'] = round(nanmean(pearsonPval_tmp), 5)
 		res[i]['tajD'] = round(nanmean(tajimaD_tmp), 5)
+		res[i]['thetaW'] = round(nanmean(thetaW_tmp)/size_tmp, 5)
 		res[i]['achazY'] = round(nanmean(achazY_tmp), 5)
 		res[i]['position'] = round(nanmean(pos_tmp), 5)
 	return(res)
@@ -305,6 +309,7 @@ bins = window(width, step)
 stats_out = ""
 for i in bins:
 	stats_out += 'pi_avg_bin{0}\t'.format(i)
+	stats_out += 'thetaW_avg_bin{0}\t'.format(i)
 	stats_out += 'pi_std_bin{0}\t'.format(i)
 	stats_out += 'tajD_bin{0}\t'.format(i)
 	stats_out += 'achazY_bin{0}\t'.format(i)
@@ -338,6 +343,7 @@ for i in range(nCombParam): # loop over combination of parameters
 	a = calc_window(i, nRep=nRep, bins=bins, regionSize=regionSize, nIndiv=nIndiv) # get summary statistics per bin for the replicate i
 	for j in bins:
 		stats_out += "{0}\t".format(a[j]['pi_avg'])
+		stats_out += "{0}\t".format(a[j]['thetaW'])
 		stats_out += "{0}\t".format(a[j]['pi_std'])
 		stats_out += "{0}\t".format(a[j]['tajD'])
 		stats_out += "{0}\t".format(a[j]['achazY'])
