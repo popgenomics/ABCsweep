@@ -1,0 +1,1 @@
+./ABCsweep.sh 50 10000 1000 5 100000 prior_SAA_SaA_age_pos.txt

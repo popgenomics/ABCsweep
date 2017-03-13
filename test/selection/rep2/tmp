@@ -1,0 +1,13 @@
+i=i+1;plot(as.numeric(pos[i,]), as.numeric(achaz[i,]),type="l"); abline(h=0, lty=2)
+Call:
+ abcrf(modindex = modIndex, sumsta = rbind(neutral_references,      selection_references), ntree = 2000, paral = T)
+includes the axes of a preliminary LDA
+
+Number of simulations: 9598
+     Prior error rate: 0.5001%
+
+Confusion matrix:
+             1    2  class.error
+neutral   4796   45 0.0092956001
+selection    3 4754 0.0006306496
+
