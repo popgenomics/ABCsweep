@@ -26,13 +26,16 @@ class Alignment{
 	// methods:
 	public:
 	Alignment();
-	void ajouteReplicat(); 
+	void initialise(); // initialise and clear all attributes
+	void ajouteReplicat(); // add one more replicate
+	void ajouteSNP(unsigned nSNP); // add the objerved number of SNP to m_nSNP
+	void afficherContenu();
 
 	// attributes:
 	private:
-	unsigned m_nReplicate;
-	std::vector<unsigned> m_nIndiv;
-	std::vector<unsigned> m_nSNP;
+	unsigned m_nReplicate; // number of stored replicates (i.e: with nSNP>0)
+	std::vector<unsigned> m_nIndiv; // if 3 replicates : m_nIndiv = [nIndiv_rep1, nIndiv_rep1, nIndiv_rep1]
+	std::vector<unsigned> m_nSNP; // if 3 replicates : m_nSNP = [nSNP_rep1, nSNP_rep1, nSNP_rep1]
 	std::vector< std::vector<std::string> > m_dataset; // dataset[over replicates][over individuals] -> one sequence per individual
 	std::vector< std::vector<float> > m_position; // dataset[over replicates][over SNPs] -> one position per SNP
 };
@@ -50,7 +53,7 @@ int main(int argc, char* argv[]){
 	// define the boundaries of the surveyed windows over a sequence
 	Bins bins;
 	bins.window(0.1, 0.05);
-	bins.printBins();
+//	bins.printBins();
 
 	// read the msms outputfile
 	std::ifstream fifo(msmsFile.c_str());
@@ -60,15 +63,23 @@ int main(int argc, char* argv[]){
 		unsigned i(0);
 		unsigned nDataset(0); // count the number of simulated datasets over the whole msmsFile
 		unsigned nSNPs(0); // number of SNPs for a given dataset
-		int test(-1); // =-1 at the 'segsites' line. setted to +1 at the 'positions' line. haplotypes are only readen if test==1
+//		int test(-1); // =-1 at the 'segsites' line. setted to +1 at the 'positions' line. haplotypes are only readen if test==1
 		unsigned cntIndiv(0); // count the number of haplotypes after the 'positions' line for a given dataset
-		std::vector<std::string> alignement; // contains nIndiv haplotypes
+		std::vector<std::string> haplotypes; // contains nIndiv haplotypes
+		Alignment data;
+		unsigned replicateID(0);
 
 		while(std::getline(fifo, ligne)){ // read the msmsFile
 
 			// 'segsites' line
 			if(ligne[0]=='s'){ // if the line starts by a 's', then we expect: 'segsites: int'
-				test = -1;
+				nDataset++;
+				replicateID = nDataset%nReplicate; // the ID of the dataset over nReplicate replicates
+				if(replicateID == 1){
+				// if first dataset of the replicated combination of parameters
+					data.initialise();
+				}
+//				test = -1;
 				std::istringstream iss(ligne);
 				i = 0;
 				// read over the line containing 'segsites' to get the number of SNPs
@@ -78,18 +89,20 @@ int main(int argc, char* argv[]){
 					}
 					i++;
 				}
-				// stop reading the 'segites' line
-//				std::cout << ligne << std::endl;
-			continue;
+				if(nSNPs > 0){
+					data.ajouteReplicat();
+					data.ajouteSNP(nSNPs);
+				}
+				continue; // stop reading the 'segites' line
 			} // end of: "if the line contains the string: 'segsites'
 
 		
 			// 'positions' line	
 			if(ligne[0]=='p'){ // if the line starts by a 'p', then we expect: 'positions: ...'
-				test = 1;
+//				test = 1;
 				cntIndiv = 0;
 				i = 0; // count the number of elements in the line
-				alignement.clear(); // clear the vector containing nIndiv sequences
+				haplotypes.clear(); // clear the vector containing nIndiv sequences
 				
 				std::istringstream iss(ligne);
 				std::vector<float> positions; // vector containing the positions
@@ -103,21 +116,23 @@ int main(int argc, char* argv[]){
 			continue;
 			} // end of: "if the line contains the string: 'positions'
 
-
-			if(test == 1 && ligne!="" && ligne[0]!='/' && ligne[0]!='s' && ligne[0]!='p'){ /* If the line is not
-				empty, and doesn't start by '/', nor 'segsites', nor 'positions'*/
+			/* If the line is not empty, and doesn't start by '/', nor 'segsites', nor 'positions'*/
+			//if(test == 1 && ligne!="" && ligne[0]!='/' && ligne[0]!='s' && ligne[0]!='p'){ 
+			if(ligne!="" && ligne[0]!='/' && ligne[0]!='s' && ligne[0]!='p'){ 
 				if(cntIndiv < (nIndiv+1)){
 					cntIndiv++;
-					alignement.push_back(ligne);
+					haplotypes.push_back(ligne);
 				//	std::cout << ligne << std::endl;
 				}
 				if(cntIndiv == nIndiv){
-					nDataset++;
 					for(i=0; i<nIndiv; i++){
-					//	std::cout << i << ": " << alignement[i] << std::endl;
+					//	std::cout << i << ": " << haplotypes[i] << std::endl;
 					}
 					std::cout << "end of treatment of dataset " << nDataset <<
-					" from replicate " << nDataset%nReplicate << std::endl ;
+					" from replicate " << replicateID << std::endl ;
+				}
+				if(replicateID == (nReplicate - 1) ){
+					data.afficherContenu();
 				}
 			}
 			
@@ -169,12 +184,32 @@ Alignment::Alignment() : m_nReplicate(0)
 {
 }
 
+void Alignment::initialise(){
+	m_nReplicate = 0;
+	m_nIndiv.clear();
+	m_nSNP.clear();
+	m_dataset.clear();
+	m_position.clear();
+}
+
 void Alignment::ajouteReplicat(){ 
+	m_nReplicate++ ;
 	std::vector <std::string> tmp_seq;
 	std::vector <float> tmp_pos;
 	m_nIndiv.push_back(0); // vector of nReplicate values of nIndiv
 	m_nSNP.push_back(0); // vector of nReplicate values of nSNPs
 	m_dataset.push_back(tmp_seq); // rReplicate vectors, each containing nIndiv sequences
 	m_position.push_back(tmp_pos); // nReplicate vectors, each containing nSNP positions
+}
+
+void Alignment::ajouteSNP(unsigned nSNP){
+	m_nSNP[m_nReplicate] = nSNP;
+}
+
+void Alignment::afficherContenu(){
+	unsigned i(0);
+	for(i=0; i<m_nReplicate; i++){
+		std::cout << "# of SNP for " << i << " : " << m_nSNP[i] << std::endl;
+	}
 }
 
