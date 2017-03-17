@@ -13,10 +13,13 @@ class Bins{
 	public:
 	void window(float width, float step);
 	void printBins();
+	unsigned returnNElements();
+	float returnMin(int position);
+	float returnMax(int position);
 
 	// attributes
 	private:
-	size_t m_nElements;
+	unsigned m_nElements;
 	std::vector<float> m_min;
 	std::vector<float> m_max;
 };
@@ -32,16 +35,22 @@ class Alignment{
 	void ajoutePosition(std::vector<float> listePos); // add the list of positions between 0 and 1 
 	void ajouteHaplotype(std::vector<std::string> listeSeq); // add the list of sequences 
 	void setOfParamID(int setID);
+//	void fillBins(const Bins bins);	
+	void computePi();
+	void fillBins(float* minB, float* maxB, const unsigned nBins);
 	void afficherContenu();
 
 	// attributes:
 	private:
 	int m_setID; // ID of the replicated set of parameters
 	int m_nReplicate; // number of stored replicates of a set of parameters (i.e: with nSNP>0)
+	std::vector< std::vector<float> >m_pi;
 	std::vector<unsigned> m_nIndiv; // if 3 replicates : m_nIndiv = [nIndiv_rep1, nIndiv_rep1, nIndiv_rep1]
 	std::vector<unsigned> m_nSNP; // if 3 replicates : m_nSNP = [nSNP_rep1, nSNP_rep1, nSNP_rep1]
 	std::vector< std::vector<std::string> > m_dataset; // dataset[over replicates][over individuals] -> one sequence per individual
+	std::vector< std::vector< std::vector <std::string> > > m_bins_dataset; // [replicate][bin][vector of haplotypes] 
 	std::vector< std::vector<float> > m_position; // dataset[over replicates][over SNPs] -> one position per SNP
+	std::vector< std::vector< std::vector <float> > > m_bins_position; // [replicate][bin][vector of position]
 };
 
 
@@ -49,6 +58,7 @@ class Alignment{
 
 // arg1 = name of the msms outputfile
 int main(int argc, char* argv[]){
+	unsigned i(0);
 	const std::string msmsFile(argv[1]); // mmsFile contains the name of msms output file to read
 	const unsigned nIndiv = atoi(argv[2]); // number of individuals in the alignment
 	const unsigned nCombParam = atoi(argv[3]); // number of combination of parameters
@@ -58,13 +68,25 @@ int main(int argc, char* argv[]){
 	Bins bins;
 	bins.window(0.1, 0.05);
 //	bins.printBins();
+	const unsigned nBins(bins.returnNElements());
+	float minBin[nBins];
+	float maxBin[nBins];
+	
+	for(i=0; i<nBins; i++){
+		minBin[i] = bins.returnMin(i);
+		maxBin[i] = bins.returnMax(i);
+	}
+
+	for(i=0; i<nBins; i++){
+
+		std::cout << "min = " << minBin[i] << "\tmax = " << maxBin[i] << std::endl;
+	}
 
 	// read the msms outputfile
 	std::ifstream fifo(msmsFile.c_str());
 	if(fifo){ // if the file msmsFile exists
 		std::string ligne;
 		std::string mot;
-		unsigned i(0);
 		unsigned nDataset(0); // count the number of simulated datasets over the whole msmsFile
 		unsigned nSNPs(0); // number of SNPs for a given dataset
 //		int test(-1); // =-1 at the 'segsites' line. setted to +1 at the 'positions' line. haplotypes are only readen if test==1
@@ -131,11 +153,14 @@ int main(int argc, char* argv[]){
 					for(i=0; i<nIndiv; i++){
 						data.ajouteHaplotype(haplotypes); // put vector <haplotypes> to Alignment data
 					}
+
 /*					std::cout << "end of treatment of dataset " << nDataset <<
 					" from replicate " << replicateID << std::endl ;*/
 					if(replicateID == 0){
 						data.setOfParamID(nDataset/nReplicate);
+						data.computePi();
 						data.afficherContenu();
+						data.fillBins(minBin, maxBin, nBins);
 					}
 				}
 			}
@@ -181,6 +206,19 @@ void Bins::printBins(){
 	}
 }
 
+unsigned Bins::returnNElements(){
+	return(m_nElements);
+}
+
+
+float Bins::returnMin(int position){
+	return(m_min[position]);
+}
+
+
+float Bins::returnMax(int position){
+	return(m_max[position]);
+}
 
 // methods for class 'Alignment'
 // constructeur
@@ -194,17 +232,25 @@ void Alignment::initialise(){
 	m_nIndiv.clear();
 	m_nSNP.clear();
 	m_dataset.clear();
+	m_bins_dataset.clear();
 	m_position.clear();
+	m_bins_position.clear();
+	m_pi.clear();
 }
 
 void Alignment::ajouteReplicat(unsigned nIndiv){ 
 	m_nReplicate++ ;
-	std::vector <std::string> tmp_seq;
+	std::vector <std::string> tmp_dataset;
+	std::vector < std::vector<std::string> > tmp_bins_dataset;
 	std::vector <float> tmp_pos;
+	std::vector < std::vector <float> > tmp_bins_pos;
 	m_nIndiv.push_back(nIndiv); // vector of nReplicate values of nIndiv
 	m_nSNP.push_back(0); // vector of nReplicate values of nSNPs
-	m_dataset.push_back(tmp_seq); // rReplicate vectors, each containing nIndiv sequences
+	m_dataset.push_back(tmp_dataset); // rReplicate vectors, each containing nIndiv sequences
+	m_bins_dataset.push_back(tmp_bins_dataset); // [bin][vector of haplotypes] 
 	m_position.push_back(tmp_pos); // nReplicate vectors, each containing nSNP positions
+	m_bins_position.push_back(tmp_bins_pos); // [bin][vector of positions] 
+	m_pi.push_back(tmp_pos); // [replicates][vector of pi over SNPs]
 }
 
 void Alignment::ajouteSNP(unsigned nSNP){
@@ -213,16 +259,19 @@ void Alignment::ajouteSNP(unsigned nSNP){
 
 
 void Alignment::ajoutePosition(std::vector<float> listePos){
+	// record the vector of positions in m_dataset[replicate]
 	m_position[m_nReplicate] = listePos;	
 }
 
 
 void Alignment::ajouteHaplotype(std::vector<std::string> listeSeq){
+	// record the vector of haplotypes in m_dataset[replicate]
 	m_dataset[m_nReplicate] = listeSeq;
 }
 
 
 void Alignment::setOfParamID(int setID){
+	// record the ID of the combination of parameters among the nCombParam
 	m_setID = setID;
 }
 
@@ -235,11 +284,12 @@ void Alignment::afficherContenu(){
 	unsigned i(0);
 	unsigned j(0);
 	std::cout << "Replicated set of parameters #_" << m_setID << " --> " << m_nReplicate + 1 << " replicates" << std::endl;
+	// CAREFUL: ALL LOOPS OVER m_Replicate have to be in [0 - m_nReplicate] and not [0 - m_nReplicate[
 	for(i=0; i<= m_nReplicate; i++){ // 1) loop over replicates
 		std::cout << "replicate " << i << " : " << m_nSNP[i] << " SNPs" << std::endl;
 		std::cout << "Positions: ";
 		for(j=0; j<m_nSNP[i]; j++){ // 2) loop over SNPs
-			std::cout << m_position[i][j] << " ";
+			std::cout << m_position[i][j] << " (pi=" << m_pi[i][j] << ") ";
 		}
 		std::cout << std::endl;
 
@@ -251,5 +301,41 @@ void Alignment::afficherContenu(){
 	}
 }
 
+void Alignment::computePi(){
+	unsigned i(0);
+	unsigned j(0);
+	unsigned k(0);
+	float nComb(0.0); 
+	for(i=0; i<=m_nReplicate; i++){ // CAREFUL: ALL LOOPS OVER m_Replicate have to be in [0 - m_nReplicate] and not [0 - m_nReplicate[
+		nComb = m_nIndiv[i] * (m_nIndiv[i] - 1) / 2; // number of pairwise differences
+		for(j=0; j<m_nSNP[i]; j++){ // loop over SNPs
+			m_pi[i].push_back(0.0);
+			
+			for(k=0; k<m_nIndiv[m_nReplicate]; k++){ // loop over individuals
+				if(m_dataset[i][k][j] == '1'){ // if allele '1' is found
+					m_pi[i][j]++; // then add +1 to m_pi[replicate][SNP]
+				}
+			} // end of loop over individuals
+			m_pi[i][j] = (m_pi[i][j] * (m_nIndiv[i] - m_pi[i][j]))/nComb; // m_pi[replicate][SNP] = (#1*#0)/nComb
+		}
+	}
+}
 
+
+void Alignment::fillBins(float* minBin, float* maxBin, const unsigned nBins){
+	unsigned i(0);
+	unsigned j(0);
+	unsigned k(0);
+	float pos_TMP(0.0);
+
+	for(i=0; i<m_nReplicate; i++){
+		for(j=0; j<m_position[i].size(); j++){
+			post_TMP = m_position[i][j];
+			
+			for(k=0; k<nBins; k++){
+
+			}
+		}
+	}	
+}
 
