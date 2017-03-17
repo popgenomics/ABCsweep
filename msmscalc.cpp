@@ -27,13 +27,17 @@ class Alignment{
 	public:
 	Alignment();
 	void initialise(); // initialise and clear all attributes
-	void ajouteReplicat(); // add one more replicate
+	void ajouteReplicat(unsigned nIndiv); // add one more replicate
 	void ajouteSNP(unsigned nSNP); // add the objerved number of SNP to m_nSNP
+	void ajoutePosition(std::vector<float> listePos); // add the list of positions between 0 and 1 
+	void ajouteHaplotype(std::vector<std::string> listeSeq); // add the list of sequences 
+	void setOfParamID(int setID);
 	void afficherContenu();
 
 	// attributes:
 	private:
-	unsigned m_nReplicate; // number of stored replicates (i.e: with nSNP>0)
+	int m_setID; // ID of the replicated set of parameters
+	int m_nReplicate; // number of stored replicates of a set of parameters (i.e: with nSNP>0)
 	std::vector<unsigned> m_nIndiv; // if 3 replicates : m_nIndiv = [nIndiv_rep1, nIndiv_rep1, nIndiv_rep1]
 	std::vector<unsigned> m_nSNP; // if 3 replicates : m_nSNP = [nSNP_rep1, nSNP_rep1, nSNP_rep1]
 	std::vector< std::vector<std::string> > m_dataset; // dataset[over replicates][over individuals] -> one sequence per individual
@@ -70,7 +74,6 @@ int main(int argc, char* argv[]){
 		unsigned replicateID(0);
 
 		while(std::getline(fifo, ligne)){ // read the msmsFile
-
 			// 'segsites' line
 			if(ligne[0]=='s'){ // if the line starts by a 's', then we expect: 'segsites: int'
 				nDataset++;
@@ -90,7 +93,7 @@ int main(int argc, char* argv[]){
 					i++;
 				}
 				if(nSNPs > 0){
-					data.ajouteReplicat();
+					data.ajouteReplicat(nIndiv);
 					data.ajouteSNP(nSNPs);
 				}
 				continue; // stop reading the 'segites' line
@@ -113,6 +116,7 @@ int main(int argc, char* argv[]){
 					}
 					i++;
 				} // stop reading the 'positions' line
+				data.ajoutePosition(positions);
 			continue;
 			} // end of: "if the line contains the string: 'positions'
 
@@ -121,18 +125,18 @@ int main(int argc, char* argv[]){
 			if(ligne!="" && ligne[0]!='/' && ligne[0]!='s' && ligne[0]!='p'){ 
 				if(cntIndiv < (nIndiv+1)){
 					cntIndiv++;
-					haplotypes.push_back(ligne);
-				//	std::cout << ligne << std::endl;
+					haplotypes.push_back(ligne); // add the ligne containing a haplotype to the vector <haplotypes>
 				}
 				if(cntIndiv == nIndiv){
 					for(i=0; i<nIndiv; i++){
-					//	std::cout << i << ": " << haplotypes[i] << std::endl;
+						data.ajouteHaplotype(haplotypes); // put vector <haplotypes> to Alignment data
 					}
-					std::cout << "end of treatment of dataset " << nDataset <<
-					" from replicate " << replicateID << std::endl ;
-				}
-				if(replicateID == (nReplicate - 1) ){
-					data.afficherContenu();
+/*					std::cout << "end of treatment of dataset " << nDataset <<
+					" from replicate " << replicateID << std::endl ;*/
+					if(replicateID == 0){
+						data.setOfParamID(nDataset/nReplicate);
+						data.afficherContenu();
+					}
 				}
 			}
 			
@@ -180,23 +184,24 @@ void Bins::printBins(){
 
 // methods for class 'Alignment'
 // constructeur
-Alignment::Alignment() : m_nReplicate(0)
+Alignment::Alignment() : m_nReplicate(0), m_setID(-1)
 {
 }
 
 void Alignment::initialise(){
-	m_nReplicate = 0;
+	m_setID = -1;
+	m_nReplicate = -1;
 	m_nIndiv.clear();
 	m_nSNP.clear();
 	m_dataset.clear();
 	m_position.clear();
 }
 
-void Alignment::ajouteReplicat(){ 
+void Alignment::ajouteReplicat(unsigned nIndiv){ 
 	m_nReplicate++ ;
 	std::vector <std::string> tmp_seq;
 	std::vector <float> tmp_pos;
-	m_nIndiv.push_back(0); // vector of nReplicate values of nIndiv
+	m_nIndiv.push_back(nIndiv); // vector of nReplicate values of nIndiv
 	m_nSNP.push_back(0); // vector of nReplicate values of nSNPs
 	m_dataset.push_back(tmp_seq); // rReplicate vectors, each containing nIndiv sequences
 	m_position.push_back(tmp_pos); // nReplicate vectors, each containing nSNP positions
@@ -206,10 +211,45 @@ void Alignment::ajouteSNP(unsigned nSNP){
 	m_nSNP[m_nReplicate] = nSNP;
 }
 
+
+void Alignment::ajoutePosition(std::vector<float> listePos){
+	m_position[m_nReplicate] = listePos;	
+}
+
+
+void Alignment::ajouteHaplotype(std::vector<std::string> listeSeq){
+	m_dataset[m_nReplicate] = listeSeq;
+}
+
+
+void Alignment::setOfParamID(int setID){
+	m_setID = setID;
+}
+
+
 void Alignment::afficherContenu(){
+	if( m_nReplicate < 0 ){
+		std::cerr << "Nothing to display for combination of parameters " << std::endl;
+		exit(0);
+	}
 	unsigned i(0);
-	for(i=0; i<m_nReplicate; i++){
-		std::cout << "# of SNP for " << i << " : " << m_nSNP[i] << std::endl;
+	unsigned j(0);
+	std::cout << "Replicated set of parameters #_" << m_setID << " --> " << m_nReplicate + 1 << " replicates" << std::endl;
+	for(i=0; i<= m_nReplicate; i++){ // 1) loop over replicates
+		std::cout << "replicate " << i << " : " << m_nSNP[i] << " SNPs" << std::endl;
+		std::cout << "Positions: ";
+		for(j=0; j<m_nSNP[i]; j++){ // 2) loop over SNPs
+			std::cout << m_position[i][j] << " ";
+		}
+		std::cout << std::endl;
+
+		for(j=0; j<m_nIndiv[i]; j++){
+			std::cout << m_dataset[i][j] << std::endl;
+		}
+		std::cout << std::endl;
+
 	}
 }
+
+
 
