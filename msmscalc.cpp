@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#define WIDTH 0.1
+#define STEP 0.05
 
 class Bins{
 	// object of class Bins contains two vectors 'min' and 'max'
@@ -66,7 +68,7 @@ int main(int argc, char* argv[]){
 
 	// define the boundaries of the surveyed windows over a sequence
 	Bins bins;
-	bins.window(0.1, 0.05);
+	bins.window(WIDTH, STEP);
 //	bins.printBins();
 	const unsigned nBins(bins.returnNElements());
 	float minBin[nBins];
@@ -77,10 +79,10 @@ int main(int argc, char* argv[]){
 		maxBin[i] = bins.returnMax(i);
 	}
 
-	for(i=0; i<nBins; i++){
+/*	for(i=0; i<nBins; i++){
 
 		std::cout << "min = " << minBin[i] << "\tmax = " << maxBin[i] << std::endl;
-	}
+	}*/
 
 	// read the msms outputfile
 	std::ifstream fifo(msmsFile.c_str());
@@ -159,7 +161,7 @@ int main(int argc, char* argv[]){
 					if(replicateID == 0){
 						data.setOfParamID(nDataset/nReplicate);
 						data.computePi();
-						data.afficherContenu();
+//						data.afficherContenu();
 						data.fillBins(minBin, maxBin, nBins);
 					}
 				}
@@ -326,16 +328,26 @@ void Alignment::fillBins(float* minBin, float* maxBin, const unsigned nBins){
 	unsigned i(0);
 	unsigned j(0);
 	unsigned k(0);
+	unsigned indiv(0);
+	int test(-1);
 	float pos_TMP(0.0);
 
-	for(i=0; i<m_nReplicate; i++){
-		for(j=0; j<m_position[i].size(); j++){
-			post_TMP = m_position[i][j];
-			
-			for(k=0; k<nBins; k++){
+	for(i=0; i<m_nReplicate; i++){ // loop over replicates
+		for(j=0; j<m_position[i].size(); j++){ // loop over positions
+			pos_TMP = m_position[i][j];
+			for(k=0; k<nBins; k++){ // loop over bins
+				if(pos_TMP > minBin[k] && pos_TMP <= maxBin[k]){ // if the position is within a bin:
+					for(indiv=0; indiv<m_nIndiv[i]; indiv++){ // loop over individuals
 
-			}
-		}
-	}	
+
+					} // end of loop over individuals
+				}
+				if(test == 1 && pos_TMP > maxBin[k]){
+					test = -1;
+					continue;
+				}
+			} // end of loop over bins
+		} // end of loop over positions
+	} // end of loop over replicates
 }
 
