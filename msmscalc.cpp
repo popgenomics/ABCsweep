@@ -42,7 +42,7 @@ class Alignment{
 	void computePiBin(const unsigned nBins); // computes pi for SNPs within bins
 	void fillBins(float* minB, float* maxB, const unsigned nBins);
 	void afficherContenu(const unsigned nBins);
-	void afficherBins(const unsigned nBins);
+	void afficherBins(float* minBin, float* maxBin, const unsigned nBins);
 
 	// attributes:
 	private:
@@ -52,11 +52,11 @@ class Alignment{
 	std::vector< std::vector< std::vector<float> > >m_bins_pi; // m_bins_pi[replicate][bin][pi for SNPs]
 	std::vector<unsigned> m_nIndiv; // if 3 replicates : m_nIndiv = [nIndiv_rep1, nIndiv_rep1, nIndiv_rep1]
 	std::vector<unsigned> m_nSNP; // if 3 replicates : m_nSNP = [nSNP_rep1, nSNP_rep1, nSNP_rep1]
+	std::vector< std::vector< unsigned> > m_bins_nSNP; // [replicate][ number of SNPs per bin], number of SNPs per bin over replicates
 	std::vector< std::vector<std::string> > m_dataset; // dataset[over replicates][over individuals] -> one sequence per individual
 	std::vector< std::vector< std::vector <std::string> > > m_bins_dataset; // [replicate][bin][vector of haplotypes] 
 	std::vector< std::vector<float> > m_position; // dataset[over replicates][over SNPs] -> one position per SNP
 	std::vector< std::vector< std::vector <float> > > m_bins_position; // [replicate][bin][vector of position]
-	std::vector< std::vector< int> > m_emptyBins; // [replicate][vector of -1 (for bins without SNP) and 1 (for bins with SNP)]
 };
 
 
@@ -168,6 +168,7 @@ int main(int argc, char* argv[]){
 						data.fillBins(minBin, maxBin, nBins);
 						data.computePiBin(nBins);
 //						data.afficherContenu(nBins);
+						data.afficherBins(minBin, maxBin, nBins);
 					}
 				}
 			}
@@ -244,7 +245,7 @@ void Alignment::initialise(){
 	m_bins_position.clear();
 	m_pi.clear();
 	m_bins_pi.clear();
-	m_emptyBins.clear();
+	m_bins_nSNP.clear();
 }
 
 void Alignment::ajouteReplicat(unsigned nIndiv){ 
@@ -252,6 +253,7 @@ void Alignment::ajouteReplicat(unsigned nIndiv){
 	std::vector <std::string> tmp_dataset;
 	std::vector < std::vector<std::string> > tmp_bins_dataset;
 	std::vector <int> tmp_test;
+	std::vector <unsigned> tmp_nSNP;
 	std::vector <float> tmp_pos;
 	std::vector < std::vector <float> > tmp_bins_pos;
 	std::vector < std::vector <float> > tmp_bins_pi; // [replicate][bin][vector of pi]
@@ -265,7 +267,7 @@ void Alignment::ajouteReplicat(unsigned nIndiv){
 	m_pi.push_back(tmp_pos); // [replicates][vector of pi over SNPs]
 	// Stats over replicates and over bins:
 	m_bins_pi.push_back(tmp_bins_pi); // std::vector< std::vector< std::vector<float> > >m_bins_pi = m_pi[bin][replicate][pi for SNPs]
-	m_emptyBins.push_back(tmp_test);
+	m_bins_nSNP.push_back(tmp_nSNP);
 }
 
 void Alignment::ajouteSNP(unsigned nSNP){
@@ -317,28 +319,19 @@ void Alignment::afficherContenu(const unsigned nBins){
 	}
 }
 
-void Alignment::afficherBins(const unsigned nBins){
+void Alignment::afficherBins(float* minBin, float* maxBin, const unsigned nBins){
 	if( m_nReplicate < 0 ){
 		std::cerr << "Nothing to display for combination of parameters " << std::endl;
 		exit(0);
 	}
 	unsigned i(0);
 	unsigned j(0);
-	std::cout << "Replicated set of parameters #_" << m_setID << " --> " << m_nReplicate + 1 << " replicates" << std::endl;
+	unsigned bin(0);
 	// CAREFUL: ALL LOOPS OVER m_Replicate have to be in [0 - m_nReplicate] and not [0 - m_nReplicate[
 	for(i=0; i<= m_nReplicate; i++){ // 1) loop over replicates
-		std::cout << "replicate " << i << " : " << m_nSNP[i] << " SNPs" << std::endl;
-		std::cout << "Positions: ";
-		for(j=0; j<m_nSNP[i]; j++){ // 2) loop over SNPs
-			std::cout << m_position[i][j] << " (pi=" << m_pi[i][j] << ") ";
+		for(bin=0; bin< nBins; bin++){
+			std::cout << "replicate " << i << ", bin " << bin << "[" << minBin[bin] << "-" << maxBin[bin] <<"] : " << m_bins_nSNP[i][bin] << " SNPs" << std::endl;
 		}
-		std::cout << std::endl;
-
-		for(j=0; j<m_nIndiv[i]; j++){
-			std::cout << m_dataset[i][j] << std::endl;
-		}
-		std::cout << std::endl;
-
 	}
 }
 
@@ -378,19 +371,14 @@ void Alignment::computePiBin(const unsigned nBins){
 	empty_bin.push_back(0.0);
 
 	for(i=0; i<=m_nReplicate; i++){ // careful: all loops over m_replicate have to be in [0 - m_nreplicate] and not [0 - m_nreplicate[
-		m_emptyBins.push_back(vector_of_test);
 		m_bins_pi.push_back(vector_of_bins);
 		nComb = m_nIndiv[i] * (m_nIndiv[i] - 1) / 2; // number of pairwise differences
 
 		for(bin=0; bin<nBins; bin++){ // loop over bins
-			if(m_bins_dataset[i][bin].size() != 0){
-				test = 1; // bin contains SNPs
+			if(m_bins_nSNP[i][bin] != 0){
 				m_bins_pi[i].push_back(vector_of_pi);
-				m_emptyBins[i].push_back(test);
 			}else{
-				test = -1; // bin without SNPs
 				m_bins_pi[i].push_back(empty_bin);
-				m_emptyBins[i].push_back(test);
 				continue; // if the bin is empty: don't compute pi and return a 0.0
 			}
 
@@ -423,33 +411,41 @@ void Alignment::fillBins(float* minBin, float* maxBin, const unsigned nBins){
 
 	std::vector< std::vector < float> > new_replicate_position_tmp;
 	std::vector < float> new_bin_position_tmp;
-	
+	std::vector <unsigned> new_replicate_nSNP_tmp;
 	
 	for(i=0; i<=m_nReplicate; i++){ // loop over replicates
 		m_bins_dataset.push_back(new_replicate_sequence_tmp);
 		m_bins_position.push_back(new_replicate_position_tmp);
+		m_bins_nSNP.push_back(new_replicate_nSNP_tmp);
+
 		for(j=0; j<m_position[i].size(); j++){ // loop over positions
 			pos_TMP = m_position[i][j];
+
 			for(k=0; k<nBins; k++){ // loop over bins for declarations
 				m_bins_dataset[i].push_back(new_bin_sequence_tmp);
 				m_bins_position[i].push_back(new_bin_position_tmp);
+				m_bins_nSNP[i].push_back(0);
 			}
+
 			for(k=0; k<nBins; k++){ // loop over bins
 				if(pos_TMP > minBin[k] && pos_TMP <= maxBin[k]){ // if the position is within a bin:
 					test=1;
 					m_bins_position[i][k].push_back(pos_TMP);
+					m_bins_nSNP[i][k]++; // count the number of SNPs in the bin 'k' of replicate 'i'
 
 					for(indiv=0; indiv<m_nIndiv[i]; indiv++){ // loop over individuals for declarations
 						m_bins_dataset[i][k].push_back(new_sequence_tmp);
 					}
+
 					for(indiv=0; indiv<m_nIndiv[i]; indiv++){ // loop over individuals
 //						std::cout << "ind " << indiv << "; pos " << pos_TMP << "; bin " << minBin[k] << "-" << maxBin[k] << "; allele " << m_dataset[i][indiv][j] << std::endl;
 						m_bins_dataset[i][k][indiv]+= m_dataset[i][indiv][j];
 					} // end of loop over individuals
 				}
+
 				if(test == 1 && pos_TMP > maxBin[k]){
 					test = -1;
-					continue;
+					continue; // interrupts the loop once the windows were found
 				}
 			} // end of loop over bins
 		} // end of loop over positions
