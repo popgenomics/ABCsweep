@@ -8,7 +8,7 @@
 #define WIDTH 0.1
 #define STEP 0.05
 
-// compil with: g++ msmscalc_v2.cpp -std=c++17 -O3 -o msmscalc
+// compil using: g++ msmscalc_v2.cpp -std=c++17 -O3 -o msmscalc
 
 void window(float width, float step, std::vector <float> & minBin, std::vector <float> & maxBin);
 void fillBins(std::vector<std::string> & bin_haplotypes, std::vector<std::string> const & haplotypes, std::vector<float> const & positions, std::vector<float> const & minBin, std::vector<float> const & maxBin, size_t const binID, const unsigned nIndiv);
@@ -17,6 +17,8 @@ void printBins(std::vector<std::string> const & bin_haplotypes);
 void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_avg_bins, std::vector< std::vector< float> > & pi_std_bins, std::vector< std::vector< float> > & thetaW_bins, std::vector< std::vector< float> > & tajimaD_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv, unsigned int replicateID, float const an, float const an2);
 
 float tajimaD(unsigned const nIndiv, float const pi, float const thetaW, float const an, float an2, const unsigned nS);
+float pearsonR(std::vector <float> const & x, std::vector <float> const & y);
+float pearsonR_array(float x[], float y[], size_t const nX);
 
 float mean_piStats(std::vector<float> const & liste);
 
@@ -463,5 +465,56 @@ float tajimaD(unsigned const nIndiv, float const pi, float const thetaW, float c
 	// tajima D
 	return((pi - thetaW) / denominator);
 
+}
+
+
+float pearsonR_vector(std::vector <float> const & x, std::vector <float> const & y){
+	// computes correlation between vectors x and y
+	size_t const nX(x.size());
+	size_t const nY(y.size());
+
+	float sumXi(0.0);
+	float sumYi(0.0);
+	float sumSquareX(0.0);
+	float sumSquareY(0.0);
+	float sumXiYi(0.0);
+
+	if(nX != nY){
+		std::cerr << "vector x and y have different lengths in function pearsonR" << std::endl;
+		exit(0);
+	}else{
+		for(size_t i(0); i<nX; ++i){
+			sumXi += x[i];
+			sumYi += y[i];
+			sumSquareX += x[i]*x[i];
+			sumSquareY += y[i]*y[i];
+			sumXiYi += x[i]*y[i];
+		}
+		float numerator(nX*sumXiYi - sumXi * sumYi);
+		float denom1(sqrt(nX*sumSquareX - sumXi*sumXi));
+		float denom2(sqrt(nX*sumSquareY - sumYi*sumYi));
+		return(numerator/(denom1*denom2));
+	}
+}
+
+float pearsonR_array(float x[], float y[], size_t const nX){
+	// computes correlation between arrays x and y
+	float sumXi(0.0);
+	float sumYi(0.0);
+	float sumSquareX(0.0);
+	float sumSquareY(0.0);
+	float sumXiYi(0.0);
+
+	for(size_t i(0); i<nX; ++i){
+		sumXi += x[i];
+		sumYi += y[i];
+		sumSquareX += x[i]*x[i];
+		sumSquareY += y[i]*y[i];
+		sumXiYi += x[i]*y[i];
+	}
+	float numerator(nX*sumXiYi - sumXi * sumYi);
+	float denom1(sqrt(nX*sumSquareX - sumXi*sumXi));
+	float denom2(sqrt(nX*sumSquareY - sumYi*sumYi));
+	return(numerator/(denom1*denom2));
 }
 
