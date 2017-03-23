@@ -11,9 +11,9 @@ void window(float width, float step, std::vector <float> & minBin, std::vector <
 void fillBins(std::vector<std::string> & bin_haplotypes, std::vector<std::string> const & haplotypes, std::vector<float> const & positions, std::vector<float> const & minBin, std::vector<float> const & maxBin, size_t const binID, const unsigned nIndiv);
 void printBins(std::vector<std::string> const & bin_haplotypes);
 
-void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv);
+void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_avg_bins, std::vector< std::vector< float> > & thetaW_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv, unsigned int replicateID, float const an);
 
-float mean_over_replicates(std::vector<float> const & liste, std::vector<unsigned> const & valide_dataset, bool const neglectUnvalidated);
+float mean_piStats(std::vector<float> const & liste);
 
 
 // arg1 = name of the msms outputfile
@@ -23,6 +23,12 @@ int main(int argc, char* argv[]){
 	const unsigned nIndiv = atoi(argv[2]); // number of individuals in the alignment
 	const unsigned nCombParam = atoi(argv[3]); // number of combination of parameters
 	const size_t nReplicate = atoi(argv[4]); // number of replicates per combination of parameters: n sim tot = nCombParam * nReplicate
+
+	// an: used to compute thetaW
+	float an = 0.0;
+	for(i=1; i<nIndiv; ++i){
+		an += (1.0 / i);
+	}
 
 	// define the boundaries of the surveyed windows over a sequence
 	std::vector <float> minBin;
@@ -54,14 +60,20 @@ int main(int argc, char* argv[]){
 
 /*		unsigned valide_dataset[nReplicate];
 		unsigned nSNPtotal[nReplicate];
-		float pi_bins[nBins];
+		float pi_avg_bins[nBins];
 		std::string haplotypes[nIndiv];*/
 		std::vector <unsigned> valide_dataset; // size = nReplicate
 		std::vector <unsigned> nSNPtotal; // size = nReplicate
-		std::vector < std::vector <float> > pi_bins; // size = [nBins][nReplicate]
+		std::vector < std::vector <float> > pi_avg_bins; // size = [nBins][nReplicate]
+		std::vector < std::vector <float> > thetaW_bins; // size = [nBins][nReplicate]
 		std::vector <std::string> haplotypes; // size = nIndiv haplotypes with all SNPs
 		std::vector <std::string> bin_haplotypes; // size = nIndiv haplotypes with SNPs within bin
 		std::vector <float> positions; // size = nSNPs
+
+		// statistics
+		float pi_avg_bin[nBins]; // contains pi averaged over replicates for each bin, from pi_avg_bins
+		float thetaW_bin[nBins]; // contains thetaW averaged over replicates for each bin, from pi_avg_bins
+		
 		while(std::getline(fifo, line)){ // read the msmsFile
 
 			// 'segsites' line
@@ -75,17 +87,24 @@ int main(int argc, char* argv[]){
 					++cntSetOfParam;
 					valide_dataset.clear();
 					nSNPtotal.clear();
-					pi_bins.clear();
+					pi_avg_bins.clear();
+					thetaW_bins.clear();
 
-					// prepare pi_bins: pi_bins[bin][replicate]
+					// prepare pi_avg_bins: pi_avg_bins[bin][replicate]
 					for(i=0; i<nBins; i++){
-						pi_bins.push_back(tmp_vector_float);
+						pi_avg_bins.push_back(tmp_vector_float);
+						pi_avg_bin[i] = 0.0;
+						thetaW_bins.push_back(tmp_vector_float);
+						thetaW_bin[i] = 0.0;
+						for(j=0; j<nReplicate; ++j){
+							pi_avg_bins[i].push_back(0.0);
+							thetaW_bins[i].push_back(0.0);
+						}
 					}
 
-					std::cout << "set of param: " << cntSetOfParam << std::endl;
+//					std::cout << "set of param: " << cntSetOfParam << std::endl;
 				}
 
-				pi_bins.clear();
 				haplotypes.clear();
 				positions.clear();
 
@@ -109,7 +128,7 @@ int main(int argc, char* argv[]){
 					valide_dataset.push_back(1);
 				}
 
-				std::cout << "\treplicate_" << replicateID << "\tnSNP " << nSNPtotal[replicateID] << "\tvalidate" << valide_dataset[replicateID] << std::endl;
+//				std::cout << "\treplicate_" << replicateID << "\tnSNP " << nSNPtotal[replicateID] << "\tvalidate" << valide_dataset[replicateID] << std::endl;
 
 
 				continue; // stop reading the 'segites' line
@@ -150,22 +169,40 @@ int main(int argc, char* argv[]){
 					for(i=0; i<nBins; ++i){ // start loop over bins
 						bin_haplotypes.clear(); // contains alignment of haplotypes for bin 'i'
 						fillBins(bin_haplotypes, haplotypes, positions, minBin, maxBin, i, nIndiv);
-				//		printBins(bin_haplotypes);
 
-						computePi(bin_haplotypes, pi_bins, nIndiv, i, nCombIndiv);
+//						std::cout << "Set of param: "<< cntSetOfParam << "\tReplicate: " << replicateID << "\tBin: " << i << std::endl;
+						//printBins(bin_haplotypes);
+
+						pi_avg_bins[i][replicateID] = 0.0;
+						thetaW_bins[i][replicateID] = 0.0;
+						computePi(bin_haplotypes, pi_avg_bins, thetaW_bins, nIndiv, i, nCombIndiv, replicateID, an);
 
 					} // end of loop over bins
 
 
 					// if the last replicate among replicates
 					if(replicateID == (nReplicate - 1)){ // block for treatment of nReplicate
-					// average over bins and replicates
+						// compute statistics for each bin and for each replicate
+						std::cout << "set of param: " << cntSetOfParam << std::endl;
+						std::cout << "compute average pi per bins over replicates" << std::endl;
+						for(i=0; i<nReplicate; ++i){
+							for(j=0; j<nBins; ++j){
+					//			mean_piStats(pi_avg_bins[j]);
+	//							std::cout << pi_avg_bins[j][i] << " ";
+							}
+	//						std::cout << std::endl;	
+						}
 
-					// clear
-					for(i=0; i<nBins; ++i){
-						pi_bins[i].clear();
-					}
-					
+						// compute statistics averaged over replicates for each bin
+						for(i=0; i<nBins; ++i){
+							pi_avg_bin[i] = mean_piStats(pi_avg_bins[i]);
+							thetaW_bin[i] = mean_piStats(thetaW_bins[i]);
+						}
+						for(i=0; i<nBins; ++i){
+							// display average "pi (thetaW), " for each bin
+							std::cout << pi_avg_bin[i] << " (" << thetaW_bin[i] << "), "; 
+						}
+						std::cout << std::endl << std::endl;
 					} // end of block for treatment of nReplicate
 				} // end of block of treatment of nIndiv haplotypes
 			continue;
@@ -237,56 +274,57 @@ void printBins(std::vector<std::string> const & bin_haplotypes){
 	for(auto const & sequence : bin_haplotypes){
 		std::cout << "sequence_" << ++i << " " << sequence << std::endl;
 	}
+	std::cout << std::endl;
 }
 
 
-void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv){
-	// compute Pi for the bin 'binID', recorded in pi_bins[binID][ vector of pi over replicates ]
+void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_avg_bins, std::vector< std::vector< float> > & thetaW_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv, unsigned int replicateID, float const an){
+	// compute Pi for the bin 'binID', recorded in pi_avg_bins[binID][ vector of pi over replicates ]
 	size_t const sizeBin(bin_haplotypes[0].size());
 	float tmpPi(0.0);
 	float meanPi(0.0);
 	std::string allele="";
+	float pi_over_SNPs[sizeBin];
+	
+	// compute thetaW
+	thetaW_bins[binID][replicateID] = sizeBin / an;
+
+//	std::cout << "nSNPs = " << sizeBin << std::endl;
 
 	// if no SNP in the bin --> return(pi = 0.0)
 	if(sizeBin == 0){
-		pi_bins[binID].push_back(0.0);
+		pi_avg_bins[binID][replicateID] = 0.0;
+		thetaW_bins[binID][replicateID] = 0.0;
 	}else{
-	
-	// if bins have SNPs:
-		// array of pi of length equal to the number of SNPs
-		float pi_over_SNPs[sizeBin];
-
 		for(size_t i(0); i<sizeBin; ++i){ // loop over SNPs
+			tmpPi = 0.0;
+			pi_over_SNPs[i] = 0.0;
+
 			for(size_t j(0); j<nIndiv; ++j){ // loop over individuals
 				allele = bin_haplotypes[j][i];
 				pi_over_SNPs[i] += std::stoi(allele);
 			} // end of loop over individuals
-
+//			std::cout << "nAllele 1 = " << pi_over_SNPs[i] << std::endl;
+	
 			tmpPi = (pi_over_SNPs[i] * (nIndiv - pi_over_SNPs[i])) / nCombIndiv; // tmpPi = #1 * #0 / nCombIndiv
 			pi_over_SNPs[i] = tmpPi; // array of pi over SNPs --> use in the futur to compute pi_std and thetaW
+//			std::cout << "pi = " << tmpPi << std::endl;
 			meanPi += tmpPi; // sum of pi values over SNPs
 		} // end of loop over SNPs
-		meanPi /= sizeBin; // meanPi = (sum of pi values / nCombIndiv) / number_of_SNP
-		pi_bins[binID].push_back(meanPi);
+//		std::cout << std::endl;
+		pi_avg_bins[binID][replicateID] = meanPi ;
 	}
 }
 
 
-float mean_over_replicates(std::vector<float> const & liste, std::vector<unsigned> const & valide_dataset, bool const neglectUnvalidated){
+float mean_piStats(std::vector<float> const & liste){
 	// return mean value of a statistics over replicates by rejecting unvalidated datasets (i.e: without SNP)
 	float res(0.0);
 	size_t cnt(0);
 
-	for(size_t i(0); i<valide_dataset.size(); ++i){
-		if(neglectUnvalidated == true){
-			if(valide_dataset[i] == 1){
-				++cnt;
-				res += liste[i];
-			}
-		}else{
-			++cnt;
-			res+= liste[i];
-		}
+	for(size_t i(0); i<liste.size(); ++i){
+		++cnt;
+		res += liste[i];
 	}
 	return(res/cnt);
 }
