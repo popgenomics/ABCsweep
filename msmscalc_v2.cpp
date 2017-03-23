@@ -8,15 +8,20 @@
 #define WIDTH 0.1
 #define STEP 0.05
 
+// compil with: g++ msmscalc_v2.cpp -std=c++17 -O3 -o msmscalc
+
 void window(float width, float step, std::vector <float> & minBin, std::vector <float> & maxBin);
 void fillBins(std::vector<std::string> & bin_haplotypes, std::vector<std::string> const & haplotypes, std::vector<float> const & positions, std::vector<float> const & minBin, std::vector<float> const & maxBin, size_t const binID, const unsigned nIndiv);
 void printBins(std::vector<std::string> const & bin_haplotypes);
 
-void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_avg_bins, std::vector< std::vector< float> > & pi_std_bins, std::vector< std::vector< float> > & thetaW_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv, unsigned int replicateID, float const an);
+void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_avg_bins, std::vector< std::vector< float> > & pi_std_bins, std::vector< std::vector< float> > & thetaW_bins, std::vector< std::vector< float> > & tajimaD_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv, unsigned int replicateID, float const an, float const an2);
+
+float tajimaD(unsigned const nIndiv, float const pi, float const thetaW, float const an, float an2, const unsigned nS);
 
 float mean_piStats(std::vector<float> const & liste);
 
-void write_results(float const pi_avg_bin[], float const pi_std_bin[], float const thetaW_bin[], int const nBins);
+void write_header(std::string const outputFile, size_t const nBins);
+void write_results(std::string const outputFile, float const pi_avg_bin[], float const pi_std_bin[], float const thetaW_bin[], float const tajimaD_bin[], size_t const nBins);
 
 // arg1 = name of the msms outputfile
 int main(int argc, char* argv[]){
@@ -25,18 +30,26 @@ int main(int argc, char* argv[]){
 	const unsigned nIndiv = atoi(argv[2]); // number of individuals in the alignment
 	const unsigned nCombParam = atoi(argv[3]); // number of combination of parameters
 	const size_t nReplicate = atoi(argv[4]); // number of replicates per combination of parameters: n sim tot = nCombParam * nReplicate
+	const std::string outputFile(argv[5]); // file name of the output file
 
 	// an: used to compute thetaW
 	float an = 0.0;
+	float an2 = 0.0;
+
 	for(i=1; i<nIndiv; ++i){
 		an += (1.0 / i);
+		an2 += (1.0 / (i*i));
 	}
+
 
 	// define the boundaries of the surveyed windows over a sequence
 	std::vector <float> minBin;
 	std::vector <float> maxBin;
 	window(WIDTH, STEP, minBin, maxBin);
 	const size_t nBins(minBin.size());
+
+	// prepare the output file
+	write_header(outputFile, nBins);
 
 	// number of combinations between nIndiv individuals
 	const unsigned nCombIndiv(nIndiv * (nIndiv - 1) / 2);
@@ -69,6 +82,8 @@ int main(int argc, char* argv[]){
 		std::vector < std::vector <float> > pi_avg_bins; // size = [nBins][nReplicate]
 		std::vector < std::vector <float> > pi_std_bins; // size = [nBins][nReplicate]
 		std::vector < std::vector <float> > thetaW_bins; // size = [nBins][nReplicate]
+		std::vector < std::vector <float> > tajimaD_bins; // size = [nBins][nReplicate]
+
 		std::vector <std::string> haplotypes; // size = nIndiv haplotypes with all SNPs
 		std::vector <std::string> bin_haplotypes; // size = nIndiv haplotypes with SNPs within bin
 		std::vector <float> positions; // size = nSNPs
@@ -77,6 +92,7 @@ int main(int argc, char* argv[]){
 		float pi_avg_bin[nBins]; // pi_avg 
 		float pi_std_bin[nBins]; // pi_std
 		float thetaW_bin[nBins]; // thetaW
+		float tajimaD_bin[nBins]; // tajD
 		
 		while(std::getline(fifo, line)){ // read the msmsFile
 
@@ -94,6 +110,7 @@ int main(int argc, char* argv[]){
 					pi_avg_bins.clear();
 					pi_std_bins.clear();
 					thetaW_bins.clear();
+					tajimaD_bins.clear();
 
 					// prepare pi_avg_bins: pi_avg_bins[bin][replicate]
 					for(i=0; i<nBins; ++i){
@@ -103,10 +120,13 @@ int main(int argc, char* argv[]){
 						pi_std_bin[i] = 0.0;
 						thetaW_bins.push_back(tmp_vector_float);
 						thetaW_bin[i] = 0.0;
+						tajimaD_bins.push_back(tmp_vector_float);
+						tajimaD_bin[i] = 0.0;
 						for(j=0; j<nReplicate; ++j){
 							pi_avg_bins[i].push_back(0.0);
 							pi_std_bins[i].push_back(0.0);
 							thetaW_bins[i].push_back(0.0);
+							tajimaD_bins[i].push_back(0.0);
 						}
 					}
 
@@ -184,7 +204,8 @@ int main(int argc, char* argv[]){
 						pi_avg_bins[i][replicateID] = 0.0;
 						pi_std_bins[i][replicateID] = 0.0;
 						thetaW_bins[i][replicateID] = 0.0;
-						computePi(bin_haplotypes, pi_avg_bins, pi_std_bins, thetaW_bins, nIndiv, i, nCombIndiv, replicateID, an);
+						tajimaD_bins[i][replicateID] = 0.0;
+						computePi(bin_haplotypes, pi_avg_bins, pi_std_bins, thetaW_bins, tajimaD_bins, nIndiv, i, nCombIndiv, replicateID, an, an2);
 
 					} // end of loop over bins
 
@@ -194,22 +215,16 @@ int main(int argc, char* argv[]){
 						// compute statistics for each bin and for each replicate
 //						std::cout << "set of param: " << cntSetOfParam << std::endl;
 //						std::cout << "compute average pi per bins over replicates" << std::endl;
-						for(i=0; i<nReplicate; ++i){
-							for(j=0; j<nBins; ++j){
-					//			mean_piStats(pi_avg_bins[j]);
-	//							std::cout << pi_avg_bins[j][i] << " ";
-							}
-	//						std::cout << std::endl;	
-						}
 
-						// compute statistics averaged over replicates for each bin
+						// compute statistics averaged over replicates for each bin in arrays of lengths [nBins]
 						for(i=0; i<nBins; ++i){
 							pi_avg_bin[i] = mean_piStats(pi_avg_bins[i]); // array of length [nBins] containing pi per bin (averaged over reps)
 							pi_std_bin[i] = mean_piStats(pi_std_bins[i]); // array of length [nBins] containing pi_std per bin (averaged over reps)
 							thetaW_bin[i] = mean_piStats(thetaW_bins[i]); // array of length [nBins] containing thetaW per bin (averaged over reps)
+							tajimaD_bin[i] = mean_piStats(tajimaD_bins[i]); // array of length [nBins] containing tajD per bin (averaged over reps)
 						}
 
-						write_results(pi_avg_bin, pi_std_bin, thetaW_bin, nBins);
+						write_results(outputFile, pi_avg_bin, pi_std_bin, thetaW_bin, tajimaD_bin, nBins);
 
 						// display average "pi (thetaW), " for each bin
 //						for(i=0; i<nBins; ++i){
@@ -291,7 +306,7 @@ void printBins(std::vector<std::string> const & bin_haplotypes){
 }
 
 
-void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_avg_bins, std::vector< std::vector< float> > & pi_std_bins, std::vector< std::vector< float> > & thetaW_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv, unsigned int replicateID, float const an){
+void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std::vector< float> > & pi_avg_bins, std::vector< std::vector< float> > & pi_std_bins, std::vector< std::vector< float> > & thetaW_bins, std::vector< std::vector< float> > & tajimaD_bins, size_t const nIndiv, size_t const binID, const unsigned nCombIndiv, unsigned int replicateID, float const an, float const an2){
 	// takes as entry bin_haplotypes: a vector of vector containing alignments of nIndiv haplotypes for each the nBins bins
 	// results stored in different: vector< vector< float> > 
 	// compute pi_avg for the bin 'binID' (rep replicateID), recorded in pi_avg_bins[binID][replicateID]
@@ -314,6 +329,7 @@ void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std
 		pi_avg_bins[binID][replicateID] = 0.0;
 		pi_std_bins[binID][replicateID] = 0.0;
 		thetaW_bins[binID][replicateID] = 0.0;
+		tajimaD_bins[binID][replicateID] = 0.0;
 	}else{
 		for(size_t i(0); i<sizeBin; ++i){ // loop over SNPs
 			tmpPi = 0.0;
@@ -335,11 +351,16 @@ void computePi(std::vector<std::string> const & bin_haplotypes, std::vector< std
 		// compute std
 		float pi_std(0.0);
 		for(size_t i(0); i<sizeBin; ++i){ // loop over SNPs to compute std
-			pi_std += (pi_over_SNPs[i] - meanPi) * (pi_over_SNPs[i] - meanPi); // sum of ( pi_i - mean_pi )²
+			pi_std += (pi_over_SNPs[i] - meanPi/sizeBin) * (pi_over_SNPs[i] - meanPi/sizeBin); // sum of ( pi_i - mean_pi )²
 		}
 		
 		pi_avg_bins[binID][replicateID] = meanPi ;
 		pi_std_bins[binID][replicateID]	= sqrt(pi_std);
+
+		// Tajima D: tajimaD(unsigned const nIndiv, float const pi, float const thetaW, float const an, float an2, const unsigned nS){
+		tajimaD_bins[binID][replicateID] = tajimaD(nIndiv,  pi_avg_bins[binID][replicateID], thetaW_bins[binID][replicateID], an, an2, sizeBin);
+
+//		std::cout << "pi = " << pi_avg_bins[binID][replicateID] << "\tthetaW = " << thetaW_bins[binID][replicateID] << "\ttajD = " << tajimaD_bins[binID][replicateID] << std::endl;
 	}
 }
 
@@ -358,29 +379,89 @@ float mean_piStats(std::vector<float> const & liste){
 }
 
 
-
-void write_results(float const pi_avg_bin[], float const pi_std_bin[], float const thetaW_bin[], int const nBins){
+void write_header(std::string const outputFile, size_t const nBins){
 	// function to write the output file containing all statistics
-	// Pi_avg
-	std::cout << "Pi_avg:" << std::endl;
-	for(size_t i=0; i<nBins; ++i){
-		std::cout << pi_avg_bin[i] << " ";
-	}
-	std::cout << std::endl;
-
 	// Pi_std
-	std::cout << "Pi_std:" << std::endl;
-	for(size_t i=0; i<nBins; ++i){
-		std::cout << pi_std_bin[i] << " ";
-	}
-	std::cout << std::endl;
+	std::ofstream outputFlux(outputFile.c_str(), std::ios::out);
 
-	// thetaW
-	std::cout << "thetaW:" << std::endl;
-	for(size_t i=0; i<nBins; ++i){
-		std::cout << thetaW_bin[i] << " ";
+	if(outputFlux){
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " stat_piAvg_" << i; 
+		}
+		
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " stat_piStd_" << i; 
+		}
+		
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " stat_thetaW_" << i; 
+		}
+		
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " stat_tajimaD_" << i; 
+		}
+		outputFlux << std::endl;
+	}else{
+		std::cerr <<  "ERROR: cannot oppen the file " << outputFile << std::endl;
+		exit(0);
 	}
-	std::cout << std::endl << std::endl;
+}
+
+void write_results(std::string const outputFile, float const pi_avg_bin[], float const pi_std_bin[], float const thetaW_bin[], float const tajimaD_bin[], size_t const nBins){
+	// function to write the output file containing all statistics
+	// Pi_std
+	std::ofstream outputFlux(outputFile.c_str(), std::ios::app);
+
+	if(outputFlux){
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " " << pi_avg_bin[i]; 
+		}
+		
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " " << pi_std_bin[i]; 
+		}
+		
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " " << thetaW_bin[i]; 
+		}
+		
+		for(size_t i=0; i<nBins; ++i){
+			outputFlux << " " << tajimaD_bin[i]; 
+		}
+		outputFlux << std::endl;
+	}else{
+		std::cerr <<  "ERROR: cannot oppen the file " << outputFile << std::endl;
+		exit(0);
+	}
+}
+
+
+float tajimaD(unsigned const nIndiv, float const pi, float const thetaW, float const an, float an2, const unsigned nS){
+	// nInd = number of individuals in the alignment
+	// pi = sum(Kxy over SNPs and pairwise comparisons) / number_of_pairwise_comparisons
+	// thetaW = nSNPs / an
+	// an = sum(1/(1:(nIndiv-1)))
+	// an = sum(1/(1:(nIndiv-1))**2)
+	// nS = number of segregating sites
+
+	// b1 and b2
+	float b1((nIndiv + 1.0) / (3.0 * (nIndiv - 1.0)));
+	float b2(2.0 * (nIndiv*nIndiv + nIndiv + 3.0) / (9.0*nIndiv * (nIndiv - 1.0)));
+
+	// c1 and c2
+	float c1(b1 - 1.0 / an);
+	float c2(b2 - (nIndiv + 2.0) / (an * nIndiv) + an2/(an*an));
+	
+	// e1 and e2
+	float e1(c1/an);
+	float e2(c2/(an*an + an2));
+	
+	// denominateur
+	float denominator(e1*nS + e2*nS*(nS - 1.0));
+	denominator = sqrt(denominator);
+
+	// tajima D
+	return((pi - thetaW) / denominator);
 
 }
 
